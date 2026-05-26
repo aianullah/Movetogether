@@ -230,7 +230,7 @@ export default function MoveTogether() {
   };
 
   const leaveActivity = async (activityId) => {
-    const { error } = await supabase.from("participants").delete().eq("aktivitet_id",activityId));
+    const { error } = await supabase.from("participants").delete().eq("aktivitet_id",activityId).eq("anvandare_id",user.id);
     if (!error) {
       setMyParticipations(prev=>prev.filter(id=>id!==activityId));
       setParticipantCounts(prev=>({...prev,[activityId]:Math.max((prev[activityId]||1)-1,0)}));
