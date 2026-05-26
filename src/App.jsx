@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 
@@ -238,26 +239,24 @@ export default function MoveTogether() {
       setScreen("home");
     }
   };
-const handleCreate = async () => {
-  const { data, error } = await supabase.from("activities").insert([{
-    titel: createForm.titel,
-    typ: createForm.typ,
-    datum: createForm.datum,
-    tid: createForm.tid,
-    plats: createForm.plats,
-    nivå: createForm.nivå,
-    max_deltagare: createForm.max_deltagare,
-    beskrivning: createForm.beskrivning,
-    anvandare_id: user.id
-  }]);
-  
-  if (error) {
-    alert("Något gick fel!");
-    console.error(error);
-  } else {
-    setScreen("home");
-  }
-};
+
+  const createActivity = async () => {
+    if (!createForm.type||!createForm.titel||!createForm.datum) { showToast("Fyll i typ, titel och datum!","#E53E3E"); return; }
+    setLoading(true);
+    const { error } = await supabase.from("activities").insert({
+      titel:createForm.titel, typ:createForm.type, datum:createForm.datum,
+      tid:createForm.tid, plats:createForm.plats||createForm.stad,
+      stad:createForm.stad, max_deltagare:parseInt(createForm.max_deltagare),
+      beskrivning:createForm.beskrivning, skapad_av:user.id, status:"Öppen"
+    });
+    if (!error) {
+      await fetchActivities();
+      setCreateForm({type:"",titel:"",datum:"",tid:"",plats:"",stad:profile?.stad||"Karlskrona",max_deltagare:"6",beskrivning:"",niva:"Alla nivåer"});
+      showToast("🚀 Aktivitet publicerad!");
+      setScreen("home");
+    } else showToast("Något gick fel!","#E53E3E");
+    setLoading(false);
+  };
 
   // Only show active (non-expired) activities in feed
   const getFilteredActivities = () => {
@@ -823,3 +822,4 @@ const handleCreate = async () => {
     </div>
   );
 }
+
