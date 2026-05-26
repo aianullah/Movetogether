@@ -1,4 +1,4 @@
-cat << 'ENDOFFILE' > /mnt/user-data/outputs/movetogether.jsx
+
 import { useState, useEffect, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 
@@ -822,5 +822,3 @@ export default function MoveTogether() {
     </div>
   );
 }
-ENDOFFILE
-echo "Done! $(wc -l < /mnt/user-data/outputs/movetogether.jsx) lines"
