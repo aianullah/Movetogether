@@ -1,3 +1,4 @@
+cat << 'ENDOFFILE' > /mnt/user-data/outputs/movetogether.jsx
 import { useState, useEffect, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 
@@ -10,7 +11,7 @@ const SWEDISH_CITIES = [
   "Helsingborg","Jönköping","Norrköping","Lund","Umeå","Gävle","Borås",
   "Södertälje","Eskilstuna","Halmstad","Växjö","Karlstad","Sundsvall",
   "Östersund","Trollhättan","Luleå","Kalmar","Kristianstad","Falun",
-  "Skellefteå","Karlskrona","Ronneby","Blekinge","Hela Sverige"
+  "Skellefteå","Karlskrona","Ronneby","Blekinge"
 ];
 
 const ACTIVITY_TYPES = [
@@ -37,33 +38,39 @@ const getBadge = (n) => { const keys = Object.keys(BADGES).map(Number).sort((a,b
 const getEmoji = (typ) => ACTIVITY_TYPES.find(a=>a.type===typ)?.emoji||"🏃";
 const getColor = (typ) => TYPE_COLORS[typ]||"#1A6B4A";
 
-const getDateLabel = (datum) => {
+const isExpired = (datum, tid) => {
+  if (!datum) return false;
+  const dateStr = tid ? `${datum}T${tid}` : `${datum}T23:59`;
+  return new Date(dateStr) < new Date();
+};
+
+const getDateLabel = (datum, tid) => {
   if (!datum) return "";
+  if (isExpired(datum, tid)) return "⚫ Avslutad";
   const today = new Date(); today.setHours(0,0,0,0);
   const d = new Date(datum); d.setHours(0,0,0,0);
   const diff = Math.round((d-today)/(1000*60*60*24));
   if (diff === 0) return "🟢 Idag";
   if (diff === 1) return "🔵 Imorgon";
-  if (diff < 0) return "⚫ Avslutad";
   if (diff <= 7) return `🟡 Om ${diff} dagar`;
   return `📅 ${datum}`;
 };
 
-const getStatusLabel = (anmälda, max) => {
-  const pct = anmälda / max;
-  if (anmälda >= max) return { text: "🔴 Fullbokad", color: "#E53E3E", bg: "#FCEBEB" };
-  if (pct >= 0.7) return { text: `⚡ ${max - anmälda} platser kvar!`, color: "#854F0B", bg: "#FEF3E7" };
-  return { text: `✅ ${max - anmälda} av ${max} lediga`, color: "#1A6B4A", bg: "#E8F5EE" };
+const getStatusLabel = (count, max) => {
+  const pct = count/max;
+  if (count >= max) return {text:"🔴 Fullbokad",color:"#E53E3E",bg:"#FCEBEB"};
+  if (pct >= 0.7) return {text:`⚡ ${max-count} platser kvar!`,color:"#854F0B",bg:"#FEF3E7"};
+  return {text:`✅ ${max-count} av ${max} lediga`,color:"#1A6B4A",bg:"#E8F5EE"};
 };
 
 const S = {
-  phone: { width: "100%", maxWidth: 430, minHeight: "100vh", background: "#FAFAF8", position: "relative", display: "flex", flexDirection: "column", fontFamily: "'DM Sans', sans-serif", margin: "0 auto" },
-  input: { width: "100%", background: "#F5F3EE", border: "1.5px solid #E8E5E0", borderRadius: 12, padding: "13px 16px", fontSize: 15, color: "#1A1A1A", outline: "none", boxSizing: "border-box", fontFamily: "'DM Sans', sans-serif" },
-  btn: (bg="#1A6B4A",color="white") => ({ background: bg, border: "none", borderRadius: 16, padding: "15px", color, fontSize: 16, fontWeight: 700, cursor: "pointer", width: "100%", fontFamily: "'DM Sans', sans-serif" }),
-  card: { background: "white", borderRadius: 20, overflow: "hidden", border: "1px solid #F0EDE8", boxShadow: "0 2px 12px rgba(0,0,0,0.05)" },
-  label: { fontSize: 12, fontWeight: 600, color: "#888", marginBottom: 6, display: "block", textTransform: "uppercase", letterSpacing: 0.5 },
-  scrollArea: { flex: 1, overflowY: "auto", padding: 20, display: "flex", flexDirection: "column", gap: 14 },
-  backBtn: { background: "rgba(255,255,255,0.2)", border: "none", borderRadius: 20, padding: "7px 14px", color: "white", fontSize: 13, cursor: "pointer", marginBottom: 12 },
+  phone: {width:"100%",maxWidth:430,minHeight:"100vh",background:"#FAFAF8",position:"relative",display:"flex",flexDirection:"column",fontFamily:"'DM Sans',sans-serif",margin:"0 auto"},
+  input: {width:"100%",background:"#F5F3EE",border:"1.5px solid #E8E5E0",borderRadius:12,padding:"13px 16px",fontSize:15,color:"#1A1A1A",outline:"none",boxSizing:"border-box",fontFamily:"'DM Sans',sans-serif"},
+  btn: (bg="#1A6B4A",color="white") => ({background:bg,border:"none",borderRadius:16,padding:"15px",color,fontSize:16,fontWeight:700,cursor:"pointer",width:"100%",fontFamily:"'DM Sans',sans-serif"}),
+  card: {background:"white",borderRadius:20,overflow:"hidden",border:"1px solid #F0EDE8",boxShadow:"0 2px 12px rgba(0,0,0,0.05)"},
+  label: {fontSize:12,fontWeight:600,color:"#888",marginBottom:6,display:"block",textTransform:"uppercase",letterSpacing:0.5},
+  scrollArea: {flex:1,overflowY:"auto",padding:20,display:"flex",flexDirection:"column",gap:14},
+  backBtn: {background:"rgba(255,255,255,0.2)",border:"none",borderRadius:20,padding:"7px 14px",color:"white",fontSize:13,cursor:"pointer",marginBottom:12},
 };
 
 export default function MoveTogether() {
@@ -74,6 +81,7 @@ export default function MoveTogether() {
   const [activities, setActivities] = useState([]);
   const [participantCounts, setParticipantCounts] = useState({});
   const [myParticipations, setMyParticipations] = useState([]);
+  const [myHistory, setMyHistory] = useState([]);
   const [selectedActivity, setSelectedActivity] = useState(null);
   const [selectedActivityParticipants, setSelectedActivityParticipants] = useState([]);
   const [swipeIndex, setSwipeIndex] = useState(0);
@@ -88,12 +96,13 @@ export default function MoveTogether() {
   const [editingProfile, setEditingProfile] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [showCityPicker, setShowCityPicker] = useState(false);
+  const [profileTab, setProfileTab] = useState("info"); // info | history | stats
   const dragStart = useRef(null);
   const fileInputRef = useRef(null);
 
-  const [authForm, setAuthForm] = useState({ email:"", password:"", namn:"", stad:"Karlskrona", bio:"" });
-  const [createForm, setCreateForm] = useState({ type:"", titel:"", datum:"", tid:"", plats:"", stad:"Karlskrona", max_deltagare:"6", beskrivning:"", niva:"Alla nivåer" });
-  const [editForm, setEditForm] = useState({ namn:"", stad:"", bio:"" });
+  const [authForm, setAuthForm] = useState({email:"",password:"",namn:"",stad:"Karlskrona",bio:""});
+  const [createForm, setCreateForm] = useState({type:"",titel:"",datum:"",tid:"",plats:"",stad:"Karlskrona",max_deltagare:"6",beskrivning:"",niva:"Alla nivåer"});
+  const [editForm, setEditForm] = useState({namn:"",stad:"",bio:""});
 
   const showToast = (msg, color="#1A6B4A") => { setToast({msg,color}); setTimeout(()=>setToast(null),3000); };
 
@@ -120,19 +129,23 @@ export default function MoveTogether() {
     const { data } = await supabase.from("activities").select("*").order("datum",{ascending:true});
     if (data) {
       setActivities(data);
-      // Fetch participant counts for all activities
       const counts = {};
       await Promise.all(data.map(async (act) => {
         const { count } = await supabase.from("participants").select("*",{count:"exact",head:true}).eq("aktivitet_id",act.id);
-        counts[act.id] = count || 0;
+        counts[act.id] = count||0;
       }));
       setParticipantCounts(counts);
     }
   };
 
   const fetchMyParticipations = async (uid) => {
-    const { data } = await supabase.from("participants").select("aktivitet_id").eq("anvandare_id",uid);
-    if (data) setMyParticipations(data.map(p=>p.aktivitet_id));
+    const { data } = await supabase.from("participants").select("aktivitet_id, activities(*)").eq("anvandare_id",uid);
+    if (data) {
+      setMyParticipations(data.map(p=>p.aktivitet_id));
+      // Split into history (expired) and upcoming
+      const hist = data.filter(p=>p.activities&&isExpired(p.activities.datum, p.activities.tid)).map(p=>p.activities);
+      setMyHistory(hist);
+    }
   };
 
   const fetchActivityParticipants = async (actId) => {
@@ -140,7 +153,6 @@ export default function MoveTogether() {
     if (data) setSelectedActivityParticipants(data);
   };
 
-  // AUTH
   const handleRegister = async () => {
     if (!authForm.email||!authForm.password||!authForm.namn) { showToast("Fyll i alla fält!","#E53E3E"); return; }
     setLoading(true);
@@ -175,18 +187,17 @@ export default function MoveTogether() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    setUser(null); setProfile(null); setActivities([]); setMyParticipations([]);
+    setUser(null); setProfile(null); setActivities([]); setMyParticipations([]); setMyHistory([]);
     setScreen("auth");
   };
 
-  // PHOTO
   const handlePhotoUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     setUploadingPhoto(true);
     const reader = new FileReader();
     reader.onload = async (ev) => {
-      await supabase.from("profiles").update({profilbild_url: ev.target.result}).eq("id",user.id);
+      await supabase.from("profiles").update({profilbild_url:ev.target.result}).eq("id",user.id);
       await fetchProfile(user.id);
       setUploadingPhoto(false);
       showToast("Profilbild uppdaterad! 📸");
@@ -194,7 +205,6 @@ export default function MoveTogether() {
     reader.readAsDataURL(file);
   };
 
-  // EDIT PROFILE
   const saveProfile = async () => {
     setLoading(true);
     await supabase.from("profiles").update({namn:editForm.namn,stad:editForm.stad,bio:editForm.bio,hedersemblem:getBadge(myParticipations.length)}).eq("id",user.id);
@@ -204,13 +214,11 @@ export default function MoveTogether() {
     showToast("Profil uppdaterad! ✅");
   };
 
-  // JOIN / LEAVE
   const joinActivity = async (activityId) => {
     if (!user) return;
     if (myParticipations.includes(activityId)) { showToast("Du är redan anmäld!","#854F0B"); return; }
     const act = activities.find(a=>a.id===activityId);
-    const count = participantCounts[activityId]||0;
-    if (act && count >= act.max_deltagare) { showToast("Aktiviteten är fullbokad!","#E53E3E"); return; }
+    if (act && (participantCounts[activityId]||0) >= act.max_deltagare) { showToast("Aktiviteten är fullbokad!","#E53E3E"); return; }
     const { error } = await supabase.from("participants").insert({aktivitet_id:activityId,anvandare_id:user.id,status:"Väntande"});
     if (!error) {
       const newList = [...myParticipations, activityId];
@@ -232,7 +240,6 @@ export default function MoveTogether() {
     }
   };
 
-  // CREATE
   const createActivity = async () => {
     if (!createForm.type||!createForm.titel||!createForm.datum) { showToast("Fyll i typ, titel och datum!","#E53E3E"); return; }
     setLoading(true);
@@ -251,16 +258,25 @@ export default function MoveTogether() {
     setLoading(false);
   };
 
-  // FILTER ACTIVITIES
+  // Only show active (non-expired) activities in feed
   const getFilteredActivities = () => {
-    let list = activities;
+    let list = activities.filter(a => !isExpired(a.datum, a.tid));
     if (filter !== "Alla") list = list.filter(a=>a.typ===filter);
     if (cityFilter !== "Alla städer") list = list.filter(a=>a.stad===cityFilter||a.plats?.includes(cityFilter));
     if (searchQuery) list = list.filter(a=>a.titel?.toLowerCase().includes(searchQuery.toLowerCase())||a.plats?.toLowerCase().includes(searchQuery.toLowerCase())||a.typ?.toLowerCase().includes(searchQuery.toLowerCase()));
     return list;
   };
 
-  // SWIPE
+  // Stats from history
+  const getStats = () => {
+    const total = myHistory.length;
+    const typeCount = {};
+    myHistory.forEach(a=>{ typeCount[a.typ]=(typeCount[a.typ]||0)+1; });
+    const favType = Object.entries(typeCount).sort((a,b)=>b[1]-a[1])[0];
+    const cities = [...new Set(myHistory.map(a=>a.stad||a.plats).filter(Boolean))];
+    return { total, favType: favType?.[0], favCount: favType?.[1]||0, cities: cities.length, typeCount };
+  };
+
   const swipeList = getFilteredActivities();
   const currentCard = swipeList[swipeIndex];
 
@@ -272,19 +288,15 @@ export default function MoveTogether() {
     }, 400);
   };
 
-  const handleDragStart = (e) => { dragStart.current = e.touches?e.touches[0].clientX:e.clientX; setDragging(true); };
+  const handleDragStart = (e) => { dragStart.current=e.touches?e.touches[0].clientX:e.clientX; setDragging(true); };
   const handleDragMove = (e) => { if(!dragging)return; setDragX((e.touches?e.touches[0].clientX:e.clientX)-dragStart.current); };
   const handleDragEnd = () => { if(Math.abs(dragX)>80)handleSwipe(dragX>0?"right":"left"); setDragX(0); setDragging(false); dragStart.current=null; };
 
   const filters = ["Alla","Löpning","Cykling","Fotboll","Yoga","Socialt","Gym","Hiking"];
+  const filteredList = getFilteredActivities();
+  const stats = getStats();
 
-  const AvatarComp = ({ p, size=40 }) => {
-    const initials = p?.namn?.substring(0,2).toUpperCase()||"??";
-    if (p?.profilbild_url&&!p.profilbild_url.startsWith("http://placeholder")) return <img src={p.profilbild_url} alt="profil" style={{width:size,height:size,borderRadius:"50%",objectFit:"cover",border:"2px solid rgba(255,255,255,0.3)"}} />;
-    return <div style={{width:size,height:size,borderRadius:"50%",background:"rgba(255,255,255,0.25)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:size*0.28,fontWeight:700,color:"white",flexShrink:0}}>{initials}</div>;
-  };
-
-  // ── SPLASH ──
+  // SPLASH
   if (screen==="splash") return (
     <div style={{width:"100%",minHeight:"100vh",background:"linear-gradient(160deg,#1A6B4A,#0D3D2B)",display:"flex",alignItems:"center",justifyContent:"center"}}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:wght@700;900&display=swap" rel="stylesheet"/>
@@ -299,7 +311,7 @@ export default function MoveTogether() {
     </div>
   );
 
-  // ── AUTH ──
+  // AUTH
   if (screen==="auth") return (
     <div style={{minHeight:"100vh",background:"#F5F3EE",display:"flex",justifyContent:"center"}}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:wght@700;900&display=swap" rel="stylesheet"/>
@@ -319,10 +331,9 @@ export default function MoveTogether() {
         <div style={{padding:"16px 20px 40px",display:"flex",flexDirection:"column",gap:12}}>
           {authScreen==="register"&&<>
             <div><label style={S.label}>Namn</label><input style={S.input} placeholder="Förnamn Efternamn" value={authForm.namn} onChange={e=>setAuthForm(f=>({...f,namn:e.target.value}))}/></div>
-            <div>
-              <label style={S.label}>Stad</label>
+            <div><label style={S.label}>Stad</label>
               <select style={S.input} value={authForm.stad} onChange={e=>setAuthForm(f=>({...f,stad:e.target.value}))}>
-                {SWEDISH_CITIES.filter(c=>c!=="Hela Sverige").map(c=><option key={c}>{c}</option>)}
+                {SWEDISH_CITIES.map(c=><option key={c}>{c}</option>)}
               </select>
             </div>
             <div><label style={S.label}>Bio (valfri)</label><input style={S.input} placeholder="t.ex. Gillar löpning och kaffe" value={authForm.bio} onChange={e=>setAuthForm(f=>({...f,bio:e.target.value}))}/></div>
@@ -342,15 +353,12 @@ export default function MoveTogether() {
     </div>
   );
 
-  const filteredList = getFilteredActivities();
-
-  // ── MAIN APP ──
   return (
     <div style={{minHeight:"100vh",background:"#F5F3EE",display:"flex",justifyContent:"center"}}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:wght@700;900&display=swap" rel="stylesheet"/>
       <div style={{...S.phone}}>
 
-        {/* ── HOME ── */}
+        {/* HOME */}
         {screen==="home"&&(
           <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
             <div style={{padding:"52px 20px 8px",background:"#FAFAF8"}}>
@@ -361,29 +369,25 @@ export default function MoveTogether() {
                 </div>
                 <div style={{display:"flex",gap:8,alignItems:"center"}}>
                   <button onClick={()=>setScreen("swipe")} style={{background:"#1A6B4A",border:"none",borderRadius:20,padding:"7px 14px",color:"white",fontSize:13,fontWeight:600,cursor:"pointer"}}>✨ Swipa</button>
-                  <div onClick={()=>setScreen("profile")} style={{cursor:"pointer"}}><AvatarComp p={profile} size={36}/></div>
+                  <div onClick={()=>setScreen("profile")} style={{cursor:"pointer"}}>
+                    {profile?.profilbild_url?<img src={profile.profilbild_url} alt="profil" style={{width:36,height:36,borderRadius:"50%",objectFit:"cover",border:"2px solid #1A6B4A"}}/>:<div style={{width:36,height:36,borderRadius:"50%",background:"#1A6B4A",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,color:"white"}}>{profile?.namn?.substring(0,2).toUpperCase()||"?"}</div>}
+                  </div>
                 </div>
               </div>
-
-              {/* Search bar */}
               <div style={{position:"relative",marginBottom:10}}>
                 <span style={{position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",fontSize:16,color:"#AAA"}}>🔍</span>
                 <input style={{...S.input,paddingLeft:40,borderRadius:20,fontSize:14}} placeholder="Sök aktiviteter, stad, typ..." value={searchQuery} onChange={e=>setSearchQuery(e.target.value)}/>
               </div>
-
-              {/* City + Type filters */}
               <div style={{display:"flex",gap:8,overflowX:"auto",scrollbarWidth:"none",paddingBottom:4}}>
-                <button onClick={()=>setShowCityPicker(!showCityPicker)} style={{flexShrink:0,border:"none",borderRadius:20,padding:"7px 14px",fontSize:13,fontWeight:500,cursor:"pointer",background:cityFilter!=="Alla städer"?"#1A6B4A":"#EEECE8",color:cityFilter!=="Alla städer"?"white":"#555",display:"flex",alignItems:"center",gap:4}}>
+                <button onClick={()=>setShowCityPicker(!showCityPicker)} style={{flexShrink:0,border:"none",borderRadius:20,padding:"7px 14px",fontSize:13,fontWeight:500,cursor:"pointer",background:cityFilter!=="Alla städer"?"#1A6B4A":"#EEECE8",color:cityFilter!=="Alla städer"?"white":"#555"}}>
                   📍 {cityFilter==="Alla städer"?"Välj stad":cityFilter}
                 </button>
                 {filters.map(f=>(
                   <button key={f} onClick={()=>setFilter(f)} style={{flexShrink:0,border:"none",borderRadius:20,padding:"7px 14px",fontSize:13,fontWeight:500,cursor:"pointer",background:filter===f?"#1A6B4A":"#EEECE8",color:filter===f?"white":"#555"}}>{f}</button>
                 ))}
               </div>
-
-              {/* City picker dropdown */}
               {showCityPicker&&(
-                <div style={{background:"white",borderRadius:16,border:"1px solid #F0EDE8",padding:12,marginTop:8,maxHeight:200,overflowY:"auto",boxShadow:"0 8px 24px rgba(0,0,0,0.1)"}}>
+                <div style={{background:"white",borderRadius:16,border:"1px solid #F0EDE8",padding:12,marginTop:8,maxHeight:200,overflowY:"auto",boxShadow:"0 8px 24px rgba(0,0,0,0.1)",zIndex:20,position:"relative"}}>
                   {["Alla städer",...SWEDISH_CITIES].map(city=>(
                     <div key={city} onClick={()=>{setCityFilter(city);setShowCityPicker(false);}} style={{padding:"8px 12px",borderRadius:10,cursor:"pointer",background:cityFilter===city?"#E8F5EE":"transparent",color:cityFilter===city?"#1A6B4A":"#333",fontWeight:cityFilter===city?600:400,fontSize:14}}>
                       {cityFilter===city?"✓ ":""}{city}
@@ -394,28 +398,27 @@ export default function MoveTogether() {
             </div>
 
             <div style={{flex:1,overflowY:"auto",padding:"0 16px 12px",display:"flex",flexDirection:"column",gap:12,marginTop:10}}>
-              {/* Stats banner */}
               <div style={{background:"linear-gradient(135deg,#1A6B4A,#2E9E6E)",borderRadius:20,padding:"14px 18px",color:"white",display:"flex",alignItems:"center",gap:10}}>
                 <span style={{fontSize:24}}>🔥</span>
                 <div>
                   <div style={{fontWeight:700,fontSize:14}}>Händer nu i Sverige</div>
-                  <div style={{fontSize:12,opacity:0.85}}>{activities.length} aktiviteter · {Object.values(participantCounts).reduce((a,b)=>a+b,0)} anmälda totalt</div>
+                  <div style={{fontSize:12,opacity:0.85}}>{filteredList.length} aktiva · {Object.values(participantCounts).reduce((a,b)=>a+b,0)} anmälda totalt</div>
                 </div>
               </div>
 
               {filteredList.length===0&&(
                 <div style={{textAlign:"center",padding:48,color:"#888"}}>
                   <div style={{fontSize:56,marginBottom:12}}>🌱</div>
-                  <div style={{fontWeight:600,marginBottom:8}}>Inga aktiviteter hittades!</div>
-                  <div style={{fontSize:13}}>Prova en annan stad eller typ</div>
+                  <div style={{fontWeight:600,marginBottom:8}}>Inga aktiva aktiviteter!</div>
+                  <div style={{fontSize:13}}>Skapa den första eller byt stad</div>
                 </div>
               )}
 
               {filteredList.map(act=>{
-                const count = participantCounts[act.id]||0;
-                const status = getStatusLabel(count, act.max_deltagare);
-                const dateLabel = getDateLabel(act.datum);
-                const isJoined = myParticipations.includes(act.id);
+                const count=participantCounts[act.id]||0;
+                const status=getStatusLabel(count,act.max_deltagare);
+                const dateLabel=getDateLabel(act.datum,act.tid);
+                const isJoined=myParticipations.includes(act.id);
                 return (
                   <div key={act.id} onClick={()=>{setSelectedActivity(act);fetchActivityParticipants(act.id);setScreen("detail");}} style={{...S.card,cursor:"pointer"}}>
                     <div style={{background:getColor(act.typ),padding:"14px 18px 12px"}}>
@@ -432,10 +435,8 @@ export default function MoveTogether() {
                       </div>
                     </div>
                     <div style={{padding:"10px 18px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                      <div style={{display:"flex",alignItems:"center",gap:8}}>
-                        <span style={{background:status.bg,color:status.color,borderRadius:10,padding:"3px 10px",fontSize:12,fontWeight:600}}>{status.text}</span>
-                      </div>
-                      <div style={{fontSize:12,color:"#888"}}>👥 {count}/{act.max_deltagare} anmälda</div>
+                      <span style={{background:status.bg,color:status.color,borderRadius:10,padding:"3px 10px",fontSize:12,fontWeight:600}}>{status.text}</span>
+                      <div style={{fontSize:12,color:"#888"}}>👥 {count}/{act.max_deltagare}</div>
                     </div>
                   </div>
                 );
@@ -445,7 +446,7 @@ export default function MoveTogether() {
           </div>
         )}
 
-        {/* ── SWIPE ── */}
+        {/* SWIPE */}
         {screen==="swipe"&&(
           <div style={{flex:1,display:"flex",flexDirection:"column",background:"linear-gradient(160deg,#1A6B4A,#0D3D2B)",minHeight:"100vh"}}>
             <div style={{padding:"52px 24px 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
@@ -471,8 +472,8 @@ export default function MoveTogether() {
                             <div style={{color:"white",fontFamily:"'Fraunces',serif",fontSize:22,fontWeight:700,marginTop:8}}>{currentCard.titel}</div>
                             <div style={{color:"rgba(255,255,255,0.8)",fontSize:13,marginTop:4}}>📍 {currentCard.plats||currentCard.stad}</div>
                           </div>
-                          <div style={{background:"rgba(255,255,255,0.2)",borderRadius:12,padding:"6px 12px",textAlign:"center"}}>
-                            <div style={{color:"white",fontSize:18,fontWeight:700}}>{participantCounts[currentCard.id]||0}</div>
+                          <div style={{background:"rgba(255,255,255,0.2)",borderRadius:12,padding:"8px 12px",textAlign:"center"}}>
+                            <div style={{color:"white",fontSize:20,fontWeight:700}}>{participantCounts[currentCard.id]||0}</div>
                             <div style={{color:"rgba(255,255,255,0.8)",fontSize:10}}>anmälda</div>
                           </div>
                         </div>
@@ -480,16 +481,16 @@ export default function MoveTogether() {
                       <div style={{padding:"20px 24px"}}>
                         <div style={{display:"flex",gap:8,marginBottom:12}}>
                           <span style={{background:"#E8F5EE",color:"#1A6B4A",borderRadius:12,padding:"4px 12px",fontSize:13,fontWeight:600}}>👥 {participantCounts[currentCard.id]||0}/{currentCard.max_deltagare}</span>
-                          <span style={{background:"#F0EDE8",borderRadius:12,padding:"4px 12px",fontSize:13,color:"#666"}}>{getDateLabel(currentCard.datum)}</span>
+                          <span style={{background:"#F0EDE8",borderRadius:12,padding:"4px 12px",fontSize:13,color:"#666"}}>{getDateLabel(currentCard.datum,currentCard.tid)}</span>
                         </div>
                         <p style={{fontSize:14,color:"#555",lineHeight:1.6,margin:0}}>{currentCard.beskrivning||"Kom och häng!"}</p>
                       </div>
                     </div>
                   </div>
                   <div style={{display:"flex",gap:20,alignItems:"center"}}>
-                    <button onClick={()=>handleSwipe("left")} style={{width:68,height:68,borderRadius:"50%",background:"white",border:"none",fontSize:26,cursor:"pointer",boxShadow:"0 4px 20px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",justifyContent:"center",color:"#E53E3E"}}>✕</button>
+                    <button onClick={()=>handleSwipe("left")} style={{width:68,height:68,borderRadius:"50%",background:"white",border:"none",fontSize:26,cursor:"pointer",boxShadow:"0 4px 20px rgba(0,0,0,0.2)",color:"#E53E3E"}}>✕</button>
                     <button onClick={()=>{setSelectedActivity(currentCard);fetchActivityParticipants(currentCard.id);setScreen("detail");}} style={{width:50,height:50,borderRadius:"50%",background:"rgba(255,255,255,0.15)",border:"none",fontSize:20,cursor:"pointer"}}>ℹ️</button>
-                    <button onClick={()=>handleSwipe("right")} style={{width:68,height:68,borderRadius:"50%",background:"white",border:"none",fontSize:26,cursor:"pointer",boxShadow:"0 4px 20px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",justifyContent:"center",color:"#1A6B4A"}}>✓</button>
+                    <button onClick={()=>handleSwipe("right")} style={{width:68,height:68,borderRadius:"50%",background:"white",border:"none",fontSize:26,cursor:"pointer",boxShadow:"0 4px 20px rgba(0,0,0,0.2)",color:"#1A6B4A"}}>✓</button>
                   </div>
                   <div style={{color:"rgba(255,255,255,0.6)",fontSize:12}}>Swipa höger för att gå med · vänster för att skippa</div>
                 </>
@@ -497,7 +498,6 @@ export default function MoveTogether() {
                 <div style={{textAlign:"center",color:"white"}}>
                   <div style={{fontSize:72,marginBottom:16}}>🎉</div>
                   <div style={{fontFamily:"'Fraunces',serif",fontSize:24,fontWeight:700,marginBottom:8}}>Du har sett allt!</div>
-                  <div style={{fontSize:14,opacity:0.8,marginBottom:28}}>Skapa en aktivitet eller byt stad</div>
                   <button onClick={()=>{setSwipeIndex(0);setScreen("home");}} style={{background:"white",border:"none",borderRadius:20,padding:"14px 28px",color:"#1A6B4A",fontWeight:700,cursor:"pointer",fontSize:15}}>← Tillbaka</button>
                 </div>
               )}
@@ -505,75 +505,53 @@ export default function MoveTogether() {
           </div>
         )}
 
-        {/* ── DETAIL ── */}
+        {/* DETAIL */}
         {screen==="detail"&&selectedActivity&&(
           <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:"100vh"}}>
             <div style={{background:getColor(selectedActivity.typ),padding:"52px 24px 24px"}}>
               <button onClick={()=>setScreen("home")} style={S.backBtn}>← Tillbaka</button>
               <div style={{fontSize:52}}>{getEmoji(selectedActivity.typ)}</div>
               <div style={{fontFamily:"'Fraunces',serif",color:"white",fontSize:24,fontWeight:700,marginTop:8}}>{selectedActivity.titel}</div>
-              <div style={{color:"rgba(255,255,255,0.8)",fontSize:13,marginTop:4}}>{getDateLabel(selectedActivity.datum)} · {selectedActivity.tid}</div>
+              <div style={{color:"rgba(255,255,255,0.8)",fontSize:13,marginTop:4}}>{getDateLabel(selectedActivity.datum,selectedActivity.tid)} · {selectedActivity.tid}</div>
             </div>
             <div style={S.scrollArea}>
-              {/* Status banner */}
               {(()=>{const s=getStatusLabel(participantCounts[selectedActivity.id]||0,selectedActivity.max_deltagare);return(
-                <div style={{background:s.bg,borderRadius:16,padding:"12px 16px",display:"flex",alignItems:"center",gap:10,border:`1px solid ${s.color}33`}}>
+                <div style={{background:s.bg,borderRadius:16,padding:"12px 16px",display:"flex",alignItems:"center",gap:10}}>
                   <span style={{fontSize:20}}>{s.text.split(" ")[0]}</span>
-                  <div>
-                    <div style={{fontSize:14,fontWeight:600,color:s.color}}>{s.text}</div>
-                    <div style={{fontSize:12,color:"#888"}}>{participantCounts[selectedActivity.id]||0} av {selectedActivity.max_deltagare} platser fyllda</div>
-                  </div>
+                  <div><div style={{fontSize:14,fontWeight:600,color:s.color}}>{s.text}</div>
+                  <div style={{fontSize:12,color:"#888"}}>{participantCounts[selectedActivity.id]||0} av {selectedActivity.max_deltagare} platser fyllda</div></div>
                 </div>
               );})()}
-
               {myParticipations.includes(selectedActivity.id)&&(
                 <div style={{background:"#E8F5EE",borderRadius:16,padding:"12px 16px",display:"flex",alignItems:"center",gap:10,border:"1px solid #B8DFC4"}}>
-                  <span style={{fontSize:20}}>✅</span>
-                  <span style={{fontSize:14,fontWeight:600,color:"#1A6B4A"}}>Du är anmäld till denna aktivitet</span>
+                  <span style={{fontSize:20}}>✅</span><span style={{fontSize:14,fontWeight:600,color:"#1A6B4A"}}>Du är anmäld till denna aktivitet</span>
                 </div>
               )}
-
               <div style={{...S.card,padding:18}}>
                 {[["📍 Plats",selectedActivity.plats||selectedActivity.stad||"Ej angiven"],["🏙️ Stad",selectedActivity.stad||"Ej angiven"],["📅 Datum",selectedActivity.datum],["⏰ Tid",selectedActivity.tid||"Ej angiven"],["👥 Anmälda",`${participantCounts[selectedActivity.id]||0} av ${selectedActivity.max_deltagare}`],["🎯 Typ",selectedActivity.typ]].map(([l,v])=>(
                   <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"10px 0",borderBottom:"1px solid #F5F3EE"}}>
-                    <span style={{fontSize:13,color:"#888"}}>{l}</span>
-                    <span style={{fontSize:13,fontWeight:500}}>{v}</span>
+                    <span style={{fontSize:13,color:"#888"}}>{l}</span><span style={{fontSize:13,fontWeight:500}}>{v}</span>
                   </div>
                 ))}
               </div>
-
-              {selectedActivity.beskrivning&&(
-                <div style={{...S.card,padding:18}}>
-                  <label style={S.label}>Om aktiviteten</label>
-                  <p style={{fontSize:14,color:"#555",lineHeight:1.7,margin:0}}>{selectedActivity.beskrivning}</p>
-                </div>
-              )}
-
-              {/* Participants list */}
+              {selectedActivity.beskrivning&&<div style={{...S.card,padding:18}}><label style={S.label}>Om aktiviteten</label><p style={{fontSize:14,color:"#555",lineHeight:1.7,margin:0}}>{selectedActivity.beskrivning}</p></div>}
               {selectedActivityParticipants.length>0&&(
                 <div style={{...S.card,padding:18}}>
                   <label style={S.label}>Anmälda ({selectedActivityParticipants.length})</label>
                   <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
                     {selectedActivityParticipants.map((p,i)=>(
                       <div key={i} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
-                        <div style={{width:40,height:40,borderRadius:"50%",background:"#E8F5EE",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,color:"#1A6B4A"}}>
-                          {p.profiles?.namn?.substring(0,2).toUpperCase()||"??"}
-                        </div>
-                        <div style={{fontSize:10,color:"#888",maxWidth:50,textAlign:"center",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.profiles?.namn?.split(" ")[0]||"?"}</div>
+                        <div style={{width:40,height:40,borderRadius:"50%",background:"#E8F5EE",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,color:"#1A6B4A"}}>{p.profiles?.namn?.substring(0,2).toUpperCase()||"??"}</div>
+                        <div style={{fontSize:10,color:"#888",maxWidth:48,textAlign:"center",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.profiles?.namn?.split(" ")[0]||"?"}</div>
                       </div>
                     ))}
                     {Array.from({length:Math.max(0,selectedActivity.max_deltagare-selectedActivityParticipants.length)}).map((_,i)=>(
-                      <div key={`empty-${i}`} style={{width:40,height:40,borderRadius:"50%",background:"#F0EDE8",border:"2px dashed #CCC",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,color:"#CCC"}}>+</div>
+                      <div key={`e${i}`} style={{width:40,height:40,borderRadius:"50%",background:"#F0EDE8",border:"2px dashed #CCC",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,color:"#CCC"}}>+</div>
                     ))}
                   </div>
                 </div>
               )}
-
-              <a href={`https://wa.me/?text=Hej! Jag är intresserad av: ${selectedActivity.titel} den ${selectedActivity.datum} i ${selectedActivity.stad}`} target="_blank" rel="noreferrer"
-                style={{background:"#25D366",border:"none",borderRadius:16,padding:14,color:"white",fontSize:15,fontWeight:700,cursor:"pointer",textAlign:"center",display:"block",textDecoration:"none"}}>
-                💬 Kontakta via WhatsApp
-              </a>
-
+              <a href={`https://wa.me/?text=Hej! Kolla in: ${selectedActivity.titel} den ${selectedActivity.datum} i ${selectedActivity.stad}!`} target="_blank" rel="noreferrer" style={{background:"#25D366",border:"none",borderRadius:16,padding:14,color:"white",fontSize:15,fontWeight:700,cursor:"pointer",textAlign:"center",display:"block",textDecoration:"none"}}>💬 Kontakta via WhatsApp</a>
               {myParticipations.includes(selectedActivity.id)?(
                 <button onClick={()=>leaveActivity(selectedActivity.id)} style={S.btn("#FEF3E7","#854F0B")}>Avanmäl mig från aktiviteten</button>
               ):(
@@ -586,7 +564,7 @@ export default function MoveTogether() {
           </div>
         )}
 
-        {/* ── CREATE ── */}
+        {/* CREATE */}
         {screen==="create"&&(
           <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:"100vh"}}>
             <div style={{background:"linear-gradient(160deg,#1A6B4A,#0D3D2B)",padding:"52px 24px 24px"}}>
@@ -599,7 +577,7 @@ export default function MoveTogether() {
                 <label style={S.label}>Aktivitetstyp</label>
                 <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
                   {ACTIVITY_TYPES.map(({type,emoji})=>(
-                    <button key={type} onClick={()=>setCreateForm(f=>({...f,type}))} style={{border:"none",borderRadius:14,padding:"10px 6px",cursor:"pointer",textAlign:"center",background:createForm.type===type?"#E8F5EE":"#F5F3EE",outline:createForm.type===type?"2px solid #1A6B4A":"none",transition:"all 0.15s"}}>
+                    <button key={type} onClick={()=>setCreateForm(f=>({...f,type}))} style={{border:"none",borderRadius:14,padding:"10px 6px",cursor:"pointer",textAlign:"center",background:createForm.type===type?"#E8F5EE":"#F5F3EE",outline:createForm.type===type?"2px solid #1A6B4A":"none"}}>
                       <div style={{fontSize:22}}>{emoji}</div>
                       <div style={{fontSize:11,fontWeight:500,color:createForm.type===type?"#1A6B4A":"#666",marginTop:3}}>{type}</div>
                     </button>
@@ -608,28 +586,25 @@ export default function MoveTogether() {
               </div>
               <div style={{...S.card,padding:18,display:"flex",flexDirection:"column",gap:14}}>
                 <div><label style={S.label}>Titel</label><input type="text" placeholder="t.ex. Morgonlöpning i parken" value={createForm.titel} onChange={e=>setCreateForm(f=>({...f,titel:e.target.value}))} style={S.input}/></div>
-                <div>
-                  <label style={S.label}>Stad</label>
+                <div><label style={S.label}>Stad</label>
                   <select style={S.input} value={createForm.stad} onChange={e=>setCreateForm(f=>({...f,stad:e.target.value,plats:e.target.value}))}>
-                    {SWEDISH_CITIES.filter(c=>c!=="Hela Sverige").map(c=><option key={c}>{c}</option>)}
+                    {SWEDISH_CITIES.map(c=><option key={c}>{c}</option>)}
                   </select>
                 </div>
                 <div><label style={S.label}>Exakt plats</label><input type="text" placeholder="t.ex. Kungsmarken parkeringen" value={createForm.plats} onChange={e=>setCreateForm(f=>({...f,plats:e.target.value}))} style={S.input}/></div>
                 <div><label style={S.label}>Datum</label><input type="date" value={createForm.datum} onChange={e=>setCreateForm(f=>({...f,datum:e.target.value}))} style={S.input}/></div>
                 <div><label style={S.label}>Tid</label><input type="time" value={createForm.tid} onChange={e=>setCreateForm(f=>({...f,tid:e.target.value}))} style={S.input}/></div>
-                <div>
-                  <label style={S.label}>Nivå</label>
+                <div><label style={S.label}>Nivå</label>
                   <select value={createForm.niva} onChange={e=>setCreateForm(f=>({...f,niva:e.target.value}))} style={S.input}>
                     {["Alla nivåer","Nybörjare","Medel","Avancerad"].map(n=><option key={n}>{n}</option>)}
                   </select>
                 </div>
-                <div>
-                  <label style={S.label}>Max deltagare</label>
+                <div><label style={S.label}>Max deltagare</label>
                   <select value={createForm.max_deltagare} onChange={e=>setCreateForm(f=>({...f,max_deltagare:e.target.value}))} style={S.input}>
                     {["2","4","6","8","10","15","20","50"].map(n=><option key={n}>{n} personer</option>)}
                   </select>
                 </div>
-                <div><label style={S.label}>Beskrivning</label><textarea rows={3} placeholder="Berätta om aktiviteten, vad man ska ta med etc." value={createForm.beskrivning} onChange={e=>setCreateForm(f=>({...f,beskrivning:e.target.value}))} style={{...S.input,resize:"none"}}/></div>
+                <div><label style={S.label}>Beskrivning</label><textarea rows={3} placeholder="Berätta om aktiviteten..." value={createForm.beskrivning} onChange={e=>setCreateForm(f=>({...f,beskrivning:e.target.value}))} style={{...S.input,resize:"none"}}/></div>
               </div>
               <button onClick={createActivity} style={S.btn()} disabled={loading}>{loading?"Publicerar...":"Publicera aktivitet 🚀"}</button>
               <div style={{height:20}}/>
@@ -637,102 +612,193 @@ export default function MoveTogether() {
           </div>
         )}
 
-        {/* ── PROFILE ── */}
+        {/* PROFILE */}
         {screen==="profile"&&(
           <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:"100vh"}}>
-            <div style={{background:"linear-gradient(160deg,#1A6B4A,#0D3D2B)",padding:"52px 24px 28px",textAlign:"center",position:"relative"}}>
+            <div style={{background:"linear-gradient(160deg,#1A6B4A,#0D3D2B)",padding:"52px 24px 20px",position:"relative"}}>
               <button onClick={()=>setScreen("home")} style={{...S.backBtn,position:"absolute",top:52,left:24}}>← Tillbaka</button>
-              <div style={{position:"relative",width:90,height:90,margin:"0 auto 12px"}}>
-                {profile?.profilbild_url?(
-                  <img src={profile.profilbild_url} alt="profil" style={{width:90,height:90,borderRadius:"50%",objectFit:"cover",border:"3px solid rgba(255,255,255,0.3)"}}/>
-                ):(
-                  <div style={{width:90,height:90,borderRadius:"50%",background:"rgba(255,255,255,0.2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,fontWeight:700,color:"white",border:"3px solid rgba(255,255,255,0.3)"}}>
-                    {profile?.namn?.substring(0,2).toUpperCase()||"??"}
-                  </div>
-                )}
-                <button onClick={()=>fileInputRef.current?.click()} style={{position:"absolute",bottom:0,right:0,width:28,height:28,borderRadius:"50%",background:"white",border:"none",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 8px rgba(0,0,0,0.2)"}}>
-                  {uploadingPhoto?"⏳":"📷"}
-                </button>
-                <input ref={fileInputRef} type="file" accept="image/*" onChange={handlePhotoUpload} style={{display:"none"}}/>
+              <div style={{textAlign:"center"}}>
+                <div style={{position:"relative",width:90,height:90,margin:"0 auto 12px"}}>
+                  {profile?.profilbild_url?
+                    <img src={profile.profilbild_url} alt="profil" style={{width:90,height:90,borderRadius:"50%",objectFit:"cover",border:"3px solid rgba(255,255,255,0.3)"}}/>:
+                    <div style={{width:90,height:90,borderRadius:"50%",background:"rgba(255,255,255,0.2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,fontWeight:700,color:"white",border:"3px solid rgba(255,255,255,0.3)"}}>{profile?.namn?.substring(0,2).toUpperCase()||"??"}</div>
+                  }
+                  <button onClick={()=>fileInputRef.current?.click()} style={{position:"absolute",bottom:0,right:0,width:28,height:28,borderRadius:"50%",background:"white",border:"none",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 8px rgba(0,0,0,0.2)"}}>
+                    {uploadingPhoto?"⏳":"📷"}
+                  </button>
+                  <input ref={fileInputRef} type="file" accept="image/*" onChange={handlePhotoUpload} style={{display:"none"}}/>
+                </div>
+                <div style={{fontFamily:"'Fraunces',serif",fontSize:22,fontWeight:700,color:"white"}}>{profile?.namn||"Okänd"}</div>
+                <div style={{fontSize:13,color:"rgba(255,255,255,0.7)",marginTop:4}}>📍 {profile?.stad||"Sverige"}</div>
+                <div style={{display:"flex",gap:10,marginTop:14,justifyContent:"center"}}>
+                  {[[myHistory.length,"Genomförda"],[myParticipations.length-myHistory.length,"Kommande"],[profile?.streak||1,"Streak 🔥"]].map(([n,l])=>(
+                    <div key={l} style={{background:"rgba(255,255,255,0.15)",borderRadius:14,padding:"8px 14px",textAlign:"center"}}>
+                      <div style={{fontSize:18,fontWeight:700,color:"white"}}>{n}</div>
+                      <div style={{fontSize:10,color:"rgba(255,255,255,0.7)",marginTop:1}}>{l}</div>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div style={{fontFamily:"'Fraunces',serif",fontSize:22,fontWeight:700,color:"white"}}>{profile?.namn||"Okänd"}</div>
-              <div style={{fontSize:13,color:"rgba(255,255,255,0.7)",marginTop:4}}>📍 {profile?.stad||"Sverige"}</div>
-              <div style={{display:"flex",gap:10,marginTop:16,justifyContent:"center"}}>
-                {[[myParticipations.length,"Aktiviteter"],[profile?.streak||1,"Streak 🔥"],["5.0","Betyg ⭐"]].map(([n,l])=>(
-                  <div key={l} style={{background:"rgba(255,255,255,0.15)",borderRadius:14,padding:"10px 16px",textAlign:"center"}}>
-                    <div style={{fontSize:20,fontWeight:700,color:"white"}}>{n}</div>
-                    <div style={{fontSize:11,color:"rgba(255,255,255,0.7)",marginTop:2}}>{l}</div>
-                  </div>
+
+              {/* Tabs */}
+              <div style={{display:"flex",background:"rgba(255,255,255,0.15)",borderRadius:16,padding:4,marginTop:16}}>
+                {[["info","👤 Info"],["history","📊 Historik"],["stats","🏆 Stats"]].map(([t,l])=>(
+                  <button key={t} onClick={()=>setProfileTab(t)} style={{flex:1,border:"none",borderRadius:12,padding:"8px 4px",fontSize:13,fontWeight:600,cursor:"pointer",background:profileTab===t?"white":"transparent",color:profileTab===t?"#1A6B4A":"rgba(255,255,255,0.8)",transition:"all 0.2s"}}>
+                    {l}
+                  </button>
                 ))}
               </div>
             </div>
 
             <div style={S.scrollArea}>
-              {!editingProfile?(
-                <button onClick={()=>setEditingProfile(true)} style={S.btn("#F5F3EE","#1A6B4A")}>✏️ Redigera profil</button>
-              ):(
-                <div style={{...S.card,padding:18,display:"flex",flexDirection:"column",gap:12}}>
-                  <label style={S.label}>Redigera profil</label>
-                  <div><label style={S.label}>Namn</label><input style={S.input} value={editForm.namn} onChange={e=>setEditForm(f=>({...f,namn:e.target.value}))}/></div>
-                  <div>
-                    <label style={S.label}>Stad</label>
-                    <select style={S.input} value={editForm.stad} onChange={e=>setEditForm(f=>({...f,stad:e.target.value}))}>
-                      {SWEDISH_CITIES.filter(c=>c!=="Hela Sverige").map(c=><option key={c}>{c}</option>)}
-                    </select>
-                  </div>
-                  <div><label style={S.label}>Bio</label><textarea rows={2} style={{...S.input,resize:"none"}} value={editForm.bio} onChange={e=>setEditForm(f=>({...f,bio:e.target.value}))}/></div>
-                  <div style={{display:"flex",gap:10}}>
-                    <button onClick={()=>setEditingProfile(false)} style={{...S.btn("#F5F3EE","#888"),flex:1}}>Avbryt</button>
-                    <button onClick={saveProfile} style={{...S.btn(),flex:1}} disabled={loading}>{loading?"Sparar...":"Spara"}</button>
-                  </div>
-                </div>
-              )}
-
-              {profile?.bio&&!editingProfile&&(
-                <div style={{...S.card,padding:18}}>
-                  <label style={S.label}>Om mig</label>
-                  <p style={{fontSize:14,color:"#555",margin:0,lineHeight:1.6}}>{profile.bio}</p>
-                </div>
-              )}
-
-              <div style={{background:"linear-gradient(135deg,#FF6B35,#FF8C55)",borderRadius:20,padding:"14px 18px",display:"flex",alignItems:"center",gap:12}}>
-                <span style={{fontSize:32}}>🔥</span>
-                <div>
-                  <div style={{fontWeight:700,color:"white",fontSize:15}}>{profile?.streak||1} vecka i rad aktiv!</div>
-                  <div style={{fontSize:12,color:"rgba(255,255,255,0.85)"}}>Fortsätt – du är på en streak!</div>
-                </div>
-              </div>
-
-              <div style={{...S.card,padding:18}}>
-                <label style={S.label}>Ditt emblem</label>
-                <span style={{background:"#E8F5EE",color:"#1A6B4A",borderRadius:20,padding:"6px 14px",fontSize:14,fontWeight:500}}>{getBadge(myParticipations.length)}</span>
-                <div style={{fontSize:12,color:"#888",marginTop:10}}>
-                  {myParticipations.length<3&&`Gå med i ${3-myParticipations.length} aktivitet till för nästa emblem 🔥`}
-                  {myParticipations.length>=3&&myParticipations.length<5&&`${5-myParticipations.length} aktiviteter kvar till ⭐ Regelbunden`}
-                  {myParticipations.length>=5&&myParticipations.length<10&&`${10-myParticipations.length} aktiviteter kvar till 🏆 Veteran`}
-                  {myParticipations.length>=10&&"Du är en legend! 👑"}
-                </div>
-              </div>
-
-              <div style={{...S.card,padding:18}}>
-                <label style={S.label}>Mina anmälningar ({myParticipations.length})</label>
-                {myParticipations.length===0?(
-                  <div style={{fontSize:13,color:"#888",textAlign:"center",padding:20}}>Du har inte gått med i någon aktivitet än</div>
+              {/* INFO TAB */}
+              {profileTab==="info"&&<>
+                {!editingProfile?(
+                  <button onClick={()=>setEditingProfile(true)} style={S.btn("#F5F3EE","#1A6B4A")}>✏️ Redigera profil</button>
                 ):(
-                  activities.filter(a=>myParticipations.includes(a.id)).map(act=>(
-                    <div key={act.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:"1px solid #F5F3EE"}}>
-                      <span style={{fontSize:22}}>{getEmoji(act.typ)}</span>
-                      <div style={{flex:1}}>
-                        <div style={{fontSize:14,fontWeight:500}}>{act.titel}</div>
-                        <div style={{fontSize:12,color:"#888"}}>{getDateLabel(act.datum)} · {act.plats||act.stad}</div>
+                  <div style={{...S.card,padding:18,display:"flex",flexDirection:"column",gap:12}}>
+                    <label style={S.label}>Redigera profil</label>
+                    <div><label style={S.label}>Namn</label><input style={S.input} value={editForm.namn} onChange={e=>setEditForm(f=>({...f,namn:e.target.value}))}/></div>
+                    <div><label style={S.label}>Stad</label>
+                      <select style={S.input} value={editForm.stad} onChange={e=>setEditForm(f=>({...f,stad:e.target.value}))}>
+                        {SWEDISH_CITIES.map(c=><option key={c}>{c}</option>)}
+                      </select>
+                    </div>
+                    <div><label style={S.label}>Bio</label><textarea rows={2} style={{...S.input,resize:"none"}} value={editForm.bio} onChange={e=>setEditForm(f=>({...f,bio:e.target.value}))}/></div>
+                    <div style={{display:"flex",gap:10}}>
+                      <button onClick={()=>setEditingProfile(false)} style={{...S.btn("#F5F3EE","#888"),flex:1}}>Avbryt</button>
+                      <button onClick={saveProfile} style={{...S.btn(),flex:1}} disabled={loading}>{loading?"Sparar...":"Spara"}</button>
+                    </div>
+                  </div>
+                )}
+                {profile?.bio&&!editingProfile&&<div style={{...S.card,padding:18}}><label style={S.label}>Om mig</label><p style={{fontSize:14,color:"#555",margin:0,lineHeight:1.6}}>{profile.bio}</p></div>}
+                <div style={{background:"linear-gradient(135deg,#FF6B35,#FF8C55)",borderRadius:20,padding:"14px 18px",display:"flex",alignItems:"center",gap:12}}>
+                  <span style={{fontSize:32}}>🔥</span>
+                  <div><div style={{fontWeight:700,color:"white",fontSize:15}}>{profile?.streak||1} vecka i rad aktiv!</div>
+                  <div style={{fontSize:12,color:"rgba(255,255,255,0.85)"}}>Fortsätt – du är på en streak!</div></div>
+                </div>
+                <div style={{...S.card,padding:18}}>
+                  <label style={S.label}>Ditt emblem</label>
+                  <span style={{background:"#E8F5EE",color:"#1A6B4A",borderRadius:20,padding:"6px 14px",fontSize:14,fontWeight:500}}>{getBadge(myParticipations.length)}</span>
+                  <div style={{fontSize:12,color:"#888",marginTop:10}}>
+                    {myParticipations.length<3&&`${3-myParticipations.length} aktiviteter till för nästa emblem`}
+                    {myParticipations.length>=3&&myParticipations.length<5&&`${5-myParticipations.length} till ⭐ Regelbunden`}
+                    {myParticipations.length>=5&&myParticipations.length<10&&`${10-myParticipations.length} till 🏆 Veteran`}
+                    {myParticipations.length>=10&&"Du är en legend! 👑"}
+                  </div>
+                </div>
+                <button onClick={handleLogout} style={S.btn("#FEF3E7","#E53E3E")}>Logga ut</button>
+              </>}
+
+              {/* HISTORY TAB */}
+              {profileTab==="history"&&<>
+                {/* Skryt-kort */}
+                {myHistory.length>0&&(
+                  <div style={{background:"linear-gradient(135deg,#1A6B4A,#0D3D2B)",borderRadius:24,padding:20,color:"white"}}>
+                    <div style={{fontSize:12,opacity:0.75,textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Min aktivitetsresa 🌿</div>
+                    <div style={{fontFamily:"'Fraunces',serif",fontSize:28,fontWeight:900,marginBottom:4}}>{myHistory.length} aktiviteter</div>
+                    <div style={{fontSize:14,opacity:0.85,marginBottom:16}}>avklarade med MoveTogether</div>
+                    <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                      {Object.entries(stats.typeCount||{}).sort((a,b)=>b[1]-a[1]).slice(0,4).map(([typ,count])=>(
+                        <div key={typ} style={{background:"rgba(255,255,255,0.15)",borderRadius:12,padding:"6px 12px",display:"flex",alignItems:"center",gap:6}}>
+                          <span style={{fontSize:16}}>{getEmoji(typ)}</span>
+                          <span style={{fontSize:13,fontWeight:600}}>{count}x {typ}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{marginTop:12,fontSize:12,opacity:0.7}}>📍 {stats.cities} stad{stats.cities!==1?"er":""} besökta · {getBadge(myParticipations.length)}</div>
+                  </div>
+                )}
+
+                {myHistory.length===0?(
+                  <div style={{textAlign:"center",padding:48,color:"#888"}}>
+                    <div style={{fontSize:56,marginBottom:12}}>📊</div>
+                    <div style={{fontWeight:600,marginBottom:8}}>Ingen historik än!</div>
+                    <div style={{fontSize:13}}>Gå med i aktiviteter så visas de här när de avslutats</div>
+                  </div>
+                ):(
+                  myHistory.map(act=>(
+                    <div key={act.id} style={{...S.card,padding:0,overflow:"hidden"}}>
+                      <div style={{background:getColor(act.typ),padding:"12px 16px",display:"flex",alignItems:"center",gap:12}}>
+                        <span style={{fontSize:28}}>{getEmoji(act.typ)}</span>
+                        <div style={{flex:1}}>
+                          <div style={{color:"white",fontWeight:700,fontSize:14}}>{act.titel}</div>
+                          <div style={{color:"rgba(255,255,255,0.8)",fontSize:12,marginTop:2}}>📍 {act.plats||act.stad}</div>
+                        </div>
+                        <div style={{background:"rgba(255,255,255,0.2)",borderRadius:10,padding:"4px 10px",color:"white",fontSize:12,fontWeight:600}}>✓ Avklarad</div>
                       </div>
-                      <button onClick={()=>leaveActivity(act.id)} style={{background:"#FEF3E7",border:"none",borderRadius:10,padding:"6px 10px",fontSize:12,color:"#854F0B",cursor:"pointer",fontWeight:500}}>Avanmäl</button>
+                      <div style={{padding:"10px 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                        <div style={{fontSize:13,color:"#888"}}>📅 {act.datum} · {act.tid}</div>
+                        <div style={{fontSize:13,color:"#1A6B4A",fontWeight:600}}>+1 aktivitet 🔥</div>
+                      </div>
                     </div>
                   ))
                 )}
-              </div>
+              </>}
 
-              <button onClick={handleLogout} style={S.btn("#FEF3E7","#E53E3E")}>Logga ut</button>
+              {/* STATS TAB */}
+              {profileTab==="stats"&&<>
+                <div style={{...S.card,padding:20}}>
+                  <label style={S.label}>Din aktivitetsprofil</label>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginTop:8}}>
+                    {[["🏁","Totalt genomförda",myHistory.length],["📅","Kommande",myParticipations.length-myHistory.length],["🏙️","Städer besökta",stats.cities],["🔥","Veckor streak",profile?.streak||1]].map(([icon,label,value])=>(
+                      <div key={label} style={{background:"#F5F3EE",borderRadius:16,padding:"14px",textAlign:"center"}}>
+                        <div style={{fontSize:28,marginBottom:4}}>{icon}</div>
+                        <div style={{fontSize:22,fontWeight:700,color:"#1A1A1A"}}>{value}</div>
+                        <div style={{fontSize:11,color:"#888",marginTop:2}}>{label}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {stats.favType&&(
+                  <div style={{background:"linear-gradient(135deg,"+getColor(stats.favType)+","+getColor(stats.favType)+"CC)",borderRadius:20,padding:"16px 20px",color:"white"}}>
+                    <div style={{fontSize:12,opacity:0.8,marginBottom:4}}>FAVORITAKTIVITET</div>
+                    <div style={{display:"flex",alignItems:"center",gap:12}}>
+                      <span style={{fontSize:40}}>{getEmoji(stats.favType)}</span>
+                      <div>
+                        <div style={{fontFamily:"'Fraunces',serif",fontSize:22,fontWeight:700}}>{stats.favType}</div>
+                        <div style={{fontSize:13,opacity:0.85}}>{stats.favCount} gånger genomförd</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div style={{...S.card,padding:18}}>
+                  <label style={S.label}>Aktiviteter per typ</label>
+                  {Object.entries(stats.typeCount||{}).sort((a,b)=>b[1]-a[1]).map(([typ,count])=>(
+                    <div key={typ} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:"1px solid #F5F3EE"}}>
+                      <span style={{fontSize:20}}>{getEmoji(typ)}</span>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:13,fontWeight:500}}>{typ}</div>
+                        <div style={{height:6,background:"#F0EDE8",borderRadius:3,marginTop:4,overflow:"hidden"}}>
+                          <div style={{height:"100%",background:getColor(typ),borderRadius:3,width:`${Math.min(100,(count/myHistory.length)*100)}%`}}/>
+                        </div>
+                      </div>
+                      <span style={{fontSize:14,fontWeight:700,color:"#1A1A1A",minWidth:20,textAlign:"right"}}>{count}</span>
+                    </div>
+                  ))}
+                  {Object.keys(stats.typeCount||{}).length===0&&<div style={{fontSize:13,color:"#888",textAlign:"center",padding:20}}>Gå med i aktiviteter för att se statistik</div>}
+                </div>
+
+                <div style={{...S.card,padding:18}}>
+                  <label style={S.label}>Ditt emblem-framsteg</label>
+                  {Object.entries(BADGES).map(([req,badge])=>{
+                    const n=parseInt(req); const done=myParticipations.length>=n;
+                    return (
+                      <div key={req} style={{display:"flex",alignItems:"center",gap:12,padding:"8px 0",borderBottom:"1px solid #F5F3EE",opacity:done?1:0.4}}>
+                        <span style={{fontSize:20}}>{done?"✅":"🔒"}</span>
+                        <div style={{flex:1}}>
+                          <div style={{fontSize:14,fontWeight:done?600:400}}>{badge}</div>
+                          <div style={{fontSize:12,color:"#888"}}>{n} aktiviteter</div>
+                        </div>
+                        {done&&<span style={{fontSize:12,color:"#1A6B4A",fontWeight:600}}>Upplåst!</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </>}
+
               <div style={{height:20}}/>
             </div>
           </div>
@@ -743,11 +809,7 @@ export default function MoveTogether() {
           <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:430,background:"white",borderTop:"1px solid #F0EDE8",display:"flex",padding:"10px 0 24px",boxShadow:"0 -4px 20px rgba(0,0,0,0.06)",zIndex:50}}>
             {[["home","🗺️","Utforska"],["swipe","✨","Swipa"],["create","➕","Skapa"],["profile","👤","Profil"]].map(([s,icon,label])=>(
               <button key={s} onClick={()=>setScreen(s)} style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
-                {s==="profile"&&profile?.profilbild_url?(
-                  <img src={profile.profilbild_url} alt="profil" style={{width:26,height:26,borderRadius:"50%",objectFit:"cover",border:screen==="profile"?"2px solid #1A6B4A":"2px solid transparent"}}/>
-                ):(
-                  <span style={{fontSize:22}}>{icon}</span>
-                )}
+                {s==="profile"&&profile?.profilbild_url?<img src={profile.profilbild_url} alt="p" style={{width:26,height:26,borderRadius:"50%",objectFit:"cover",border:screen==="profile"?"2px solid #1A6B4A":"2px solid transparent"}}/>:<span style={{fontSize:22}}>{icon}</span>}
                 <span style={{fontSize:10,fontWeight:600,color:screen===s?"#1A6B4A":"#AAA"}}>{label}</span>
                 {screen===s&&<div style={{width:4,height:4,borderRadius:"50%",background:"#1A6B4A"}}/>}
               </button>
@@ -755,12 +817,10 @@ export default function MoveTogether() {
           </div>
         )}
 
-        {toast&&(
-          <div style={{position:"fixed",bottom:90,left:"50%",transform:"translateX(-50%)",background:toast.color,color:"white",borderRadius:16,padding:"14px 24px",fontSize:14,fontWeight:500,textAlign:"center",boxShadow:"0 8px 24px rgba(0,0,0,0.2)",zIndex:100,whiteSpace:"nowrap"}}>
-            {toast.msg}
-          </div>
-        )}
+        {toast&&<div style={{position:"fixed",bottom:90,left:"50%",transform:"translateX(-50%)",background:toast.color,color:"white",borderRadius:16,padding:"14px 24px",fontSize:14,fontWeight:500,textAlign:"center",boxShadow:"0 8px 24px rgba(0,0,0,0.2)",zIndex:100,whiteSpace:"nowrap"}}>{toast.msg}</div>}
       </div>
     </div>
   );
 }
+ENDOFFILE
+echo "Done! $(wc -l < /mnt/user-data/outputs/movetogether.jsx) lines"
