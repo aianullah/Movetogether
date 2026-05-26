@@ -159,23 +159,34 @@ export default function MoveTogether() {
   };
 
   // CREATE ACTIVITY
-  const createActivity = async () => {
-    if (!createForm.type || !createForm.titel || !createForm.datum) { showToast("Fyll i typ, titel och datum!", "#E53E3E"); return; }
-    setLoading(true);
-    const { error } = await supabase.from("activities").insert({
-      titel: createForm.titel, typ: createForm.type, datum: createForm.datum,
-      tid: createForm.tid, plats: createForm.plats,
-      max_deltagare: parseInt(createForm.max_deltagare),
-      beskrivning: createForm.beskrivning, skapad_av: user.id, status: "Öppen"
-    });
-    if (!error) {
-      await fetchActivities();
-      setCreateForm({ type: "", titel: "", datum: "", tid: "", plats: "", max_deltagare: "6", beskrivning: "" });
-      showToast("🚀 Aktivitet publicerad!");
-      setScreen("home");
-    } else showToast("Något gick fel!", "#E53E3E");
-    setLoading(false);
-  };
+  const skapaAktivitet = async () => {
+  // 1. Hämta inloggad användare
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) {
+    alert("Du måste vara inloggad för att skapa en aktivitet!");
+    return;
+  }
+
+  // 2. Skapa aktiviteten (vi använder user.id från sessionen)
+  const { error } = await supabase.from("activities").insert([{
+    titel: createForm.titel,
+    typ: createForm.typ,
+    datum: createForm.datum,
+    tid: createForm.tid,
+    plats: createForm.plats,
+    beskrivning: createForm.beskrivning,
+    skapad_av: user.id // Här hämtar vi ID:t säkert
+  }]);
+
+  if (error) {
+    console.error("Fel:", error);
+    alert("Det blev fel: " + error.message);
+  } else {
+    alert("Aktivitet skapad!");
+    setScreen("home");
+  }
+};
 
   // SWIPE
   const filteredActivities = filter === "Alla" ? activities : activities.filter(a => a.typ === filter);
