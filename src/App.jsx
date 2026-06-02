@@ -88,6 +88,7 @@ export default function MoveTogether() {
   const [myHistory, setMyHistory] = useState([]);
   const [friends, setFriends] = useState([]);
   const [friendRequests, setFriendRequests] = useState([]);
+  const [sentRequests, setSentRequests] = useState([]);
   const [allProfiles, setAllProfiles] = useState([]);
   const [selectedActivity, setSelectedActivity] = useState(null);
   const [selectedActivityParticipants, setSelectedActivityParticipants] = useState([]);
@@ -136,6 +137,7 @@ export default function MoveTogether() {
       fetchMyParticipations(uid),
       fetchFriends(uid),
       fetchFriendRequests(uid),
+      fetchSentRequests(uid),
       fetchAllProfiles(),
     ]);
   };
@@ -174,6 +176,11 @@ export default function MoveTogether() {
   const fetchFriendRequests = async (uid) => {
     const { data } = await supabase.from("friends").select("*, requester:user_id(*)").eq("friend_id",uid).eq("status","pending");
     if (data) setFriendRequests(data);
+  };
+
+  const fetchSentRequests = async (uid) => {
+    const { data } = await supabase.from("friends").select("friend_id").eq("user_id",uid).eq("status","pending");
+    if (data) setSentRequests(data.map(r=>r.friend_id));
   };
 
   const fetchAllProfiles = async () => {
@@ -246,11 +253,13 @@ export default function MoveTogether() {
   // FRIENDS
   const sendFriendRequest = async (friendId) => {
     if (friendId===user.id) { showToast("Det är du själv! 😄","#854F0B"); return; }
-    const alreadyFriend = friends.find(f=>f.id===friendId);
-    if (alreadyFriend) { showToast("Redan vänner!","#854F0B"); return; }
+    if (friends.find(f=>f.id===friendId)) { showToast("Redan vänner!","#854F0B"); return; }
+    if (sentRequests.includes(friendId)) { showToast("Förfrågan redan skickad!","#854F0B"); return; }
     const { error } = await supabase.from("friends").insert({user_id:user.id,friend_id:friendId,status:"pending"});
-    if (!error) { showToast("Vänförfrågan skickad! 🤝"); await fetchFriends(user.id); }
-    else showToast("Förfrågan redan skickad!","#854F0B");
+    if (!error) {
+      setSentRequests(prev=>[...prev, friendId]);
+      showToast("Vänförfrågan skickad! 🤝");
+    }
   };
 
   const acceptFriendRequest = async (requestId, requesterId) => {
@@ -606,6 +615,8 @@ export default function MoveTogether() {
                   {selectedActivityCreator.id!==user?.id&&(
                     isFriend(selectedActivityCreator.id)?(
                       <span style={{background:"#E8F5EE",color:"#1A6B4A",borderRadius:12,padding:"6px 12px",fontSize:12,fontWeight:600}}>✓ Vän</span>
+                    ):sentRequests.includes(selectedActivityCreator.id)?(
+                      <span style={{background:"#F5F3EE",color:"#888",borderRadius:12,padding:"6px 12px",fontSize:12,fontWeight:600}}>Skickad ✓</span>
                     ):(
                       <button onClick={()=>sendFriendRequest(selectedActivityCreator.id)} style={{background:"#1A6B4A",border:"none",borderRadius:12,padding:"6px 12px",color:"white",fontSize:12,fontWeight:600,cursor:"pointer"}}>+ Vän</button>
                     )
@@ -689,6 +700,14 @@ export default function MoveTogether() {
                   <div style={{...S.card,padding:16,display:"flex",alignItems:"center",gap:10}}>
                     <span style={{fontSize:24}}>🤝</span>
                     <div style={{flex:1}}><div style={{fontWeight:600}}>Ni är vänner!</div><div style={{fontSize:12,color:"#888"}}>Du kan bjuda in {viewingProfile.namn?.split(" ")[0]} till aktiviteter</div></div>
+                  </div>
+                ):sentRequests.includes(viewingProfile.id)?(
+                  <div style={{background:"#F5F3EE",borderRadius:16,padding:"14px 18px",display:"flex",alignItems:"center",gap:12}}>
+                    <span style={{fontSize:22}}>✉️</span>
+                    <div>
+                      <div style={{fontWeight:600,color:"#555"}}>Vänförfrågan skickad!</div>
+                      <div style={{fontSize:12,color:"#888"}}>Väntar på att {viewingProfile.namn?.split(" ")[0]} accepterar</div>
+                    </div>
                   </div>
                 ):(
                   <button onClick={()=>sendFriendRequest(viewingProfile.id)} style={S.btn()}>🤝 Lägg till som vän</button>
@@ -798,21 +817,30 @@ export default function MoveTogether() {
 
               {/* FRIENDS */}
               {profileTab==="friends"&&<>
-                {/* Friend requests */}
+                {/* Incoming friend requests - prominent banner */}
                 {friendRequests.length>0&&(
-                  <div style={{...S.card,padding:18}}>
-                    <label style={S.label}>Vänförfrågningar ({friendRequests.length})</label>
+                  <div style={{background:"linear-gradient(135deg,#1A6B4A,#2E9E6E)",borderRadius:20,padding:18}}>
+                    <div style={{color:"white",fontWeight:700,fontSize:15,marginBottom:12}}>🤝 Vänförfrågningar ({friendRequests.length})</div>
                     {friendRequests.map(req=>(
-                      <div key={req.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:"1px solid #F5F3EE"}}>
-                        <Avatar profile={req.requester} size={44}/>
+                      <div key={req.id} style={{background:"rgba(255,255,255,0.15)",borderRadius:16,padding:"12px 14px",marginBottom:8,display:"flex",alignItems:"center",gap:12}}>
+                        <Avatar profile={req.requester} size={46}/>
                         <div style={{flex:1}}>
-                          <div style={{fontSize:14,fontWeight:600}}>{req.requester?.namn}</div>
-                          <div style={{fontSize:12,color:"#888"}}>📍 {req.requester?.stad}</div>
+                          <div style={{fontSize:14,fontWeight:700,color:"white"}}>{req.requester?.namn}</div>
+                          <div style={{fontSize:12,color:"rgba(255,255,255,0.75)"}}>📍 {req.requester?.stad} · {req.requester?.hedersemblem||"🌱 Ny medlem"}</div>
                         </div>
-                        <button onClick={()=>acceptFriendRequest(req.id,req.user_id)} style={{background:"#1A6B4A",border:"none",borderRadius:10,padding:"6px 12px",color:"white",fontSize:13,fontWeight:600,cursor:"pointer"}}>✓</button>
-                        <button onClick={()=>declineFriendRequest(req.id)} style={{background:"#F5F3EE",border:"none",borderRadius:10,padding:"6px 12px",color:"#888",fontSize:13,fontWeight:600,cursor:"pointer"}}>✕</button>
+                        <div style={{display:"flex",gap:6}}>
+                          <button onClick={()=>acceptFriendRequest(req.id,req.user_id)} style={{background:"white",border:"none",borderRadius:12,padding:"8px 14px",color:"#1A6B4A",fontSize:13,fontWeight:700,cursor:"pointer"}}>Acceptera</button>
+                          <button onClick={()=>declineFriendRequest(req.id)} style={{background:"rgba(255,255,255,0.2)",border:"none",borderRadius:12,padding:"8px 10px",color:"white",fontSize:13,fontWeight:600,cursor:"pointer"}}>✕</button>
+                        </div>
                       </div>
                     ))}
+                  </div>
+                )}
+
+                {friendRequests.length===0&&(
+                  <div style={{background:"#F5F3EE",borderRadius:16,padding:"12px 16px",display:"flex",alignItems:"center",gap:10}}>
+                    <span style={{fontSize:20}}>✉️</span>
+                    <span style={{fontSize:13,color:"#888"}}>Inga inkommande vänförfrågningar just nu</span>
                   </div>
                 )}
 
@@ -832,6 +860,8 @@ export default function MoveTogether() {
                       </div>
                       {isFriend(p.id)?(
                         <span style={{background:"#E8F5EE",color:"#1A6B4A",borderRadius:12,padding:"4px 10px",fontSize:12,fontWeight:600}}>✓ Vän</span>
+                      ):sentRequests.includes(p.id)?(
+                        <span style={{background:"#F5F3EE",color:"#888",borderRadius:12,padding:"4px 10px",fontSize:12,fontWeight:600}}>Skickad ✓</span>
                       ):(
                         <button onClick={()=>sendFriendRequest(p.id)} style={{background:"#1A6B4A",border:"none",borderRadius:12,padding:"6px 12px",color:"white",fontSize:12,fontWeight:600,cursor:"pointer"}}>+ Lägg till</button>
                       )}
