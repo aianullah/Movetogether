@@ -988,7 +988,7 @@ const ROUND_SUGGESTIONS = [
   { km: 15, tid: "80-90 min", namn: "Halfmarathon-prep", emoji: "🏅", beskrivning: "För dig som siktar på halvmarathon" },
 ];
 
-const S = {
+const SC = {
   label: {fontSize:12,fontWeight:600,color:"#888",marginBottom:6,display:"block",textTransform:"uppercase",letterSpacing:0.5},
   card: {background:"white",borderRadius:20,border:"1px solid #F0EDE8",boxShadow:"0 2px 12px rgba(0,0,0,0.05)",overflow:"hidden"},
   btn: (bg="#1A6B4A",color="white") => ({background:bg,border:"none",borderRadius:16,padding:"14px",color,fontSize:15,fontWeight:700,cursor:"pointer",width:"100%",fontFamily:"'DM Sans',sans-serif"}),
@@ -1118,7 +1118,7 @@ function CoachScreen({ onBack }) {
             <>
               {/* Level selector */}
               <div style={{...S.card,padding:16}}>
-                <label style={S.label}>Din nivå</label>
+                <label style={SC.label}>Din nivå</label>
                 <div style={{display:"flex",gap:8}}>
                   {[["nybörjare","🌱 Nybörjare"],["medel","⭐ Medel"],["avancerad","🏆 Avancerad"]].map(([l,label])=>(
                     <button key={l} onClick={()=>setSelectedLevel(l)} style={{flex:1,border:"none",borderRadius:12,padding:"10px 4px",fontSize:12,fontWeight:600,cursor:"pointer",background:selectedLevel===l?"#1A6B4A":"#F0EDE8",color:selectedLevel===l?"white":"#555",transition:"all 0.2s"}}>
@@ -1129,7 +1129,7 @@ function CoachScreen({ onBack }) {
               </div>
 
               {/* Muscle groups */}
-              <label style={S.label}>Välj muskelgrupp</label>
+              <label style={SC.label}>Välj muskelgrupp</label>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
                 {muscles.map(muscle=>{
                   const w = WORKOUTS[muscle];
@@ -1152,7 +1152,7 @@ function CoachScreen({ onBack }) {
           ):(
             <>
               {/* Back to muscle selection */}
-              <button onClick={()=>setShowProgram(false)} style={{...S.btn("#F0EDE8","#1A6B4A"),marginBottom:4}}>← Byt muskelgrupp</button>
+              <button onClick={()=>setShowProgram(false)} style={{...SC.btn("#F0EDE8","#1A6B4A"),marginBottom:4}}>← Byt muskelgrupp</button>
 
               {/* Program header */}
               <div style={{background:`linear-gradient(135deg,${workout.color},${workout.color}CC)`,borderRadius:20,padding:"18px 20px",color:"white"}}>
@@ -1214,7 +1214,7 @@ function CoachScreen({ onBack }) {
                 </div>
               </div>
 
-              <label style={S.label}>Välj rundalängd</label>
+              <label style={SC.label}>Välj rundalängd</label>
               {ROUND_SUGGESTIONS.map((route, i)=>(
                 <button key={i} onClick={()=>setSelectedRoute(route)} style={{background:"white",border:selectedRoute?.km===route.km?"2px solid #1A6B4A":"1.5px solid #F0EDE8",borderRadius:18,padding:"16px 18px",cursor:"pointer",textAlign:"left",boxShadow:"0 2px 8px rgba(0,0,0,0.05)",width:"100%",transition:"all 0.2s"}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
