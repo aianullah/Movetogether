@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 
@@ -875,29 +874,106 @@ function CoachScreen({onBack}){
     if(tab==="routes"&&loc&&selRoute&&mapRef.current)loadMap();
   },[loc,selRoute,tab]);
 
-  const loadMap=()=>{
+  const [routeInfo,setRouteInfo]=useState(null);
+  const [loadingRoute,setLoadingRoute]=useState(false);
+  const [startAddr,setStartAddr]=useState("");
+
+  const loadMap=async()=>{
     if(!window.L){
-      const s=document.createElement("script");s.src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";s.onload=initMap;document.head.appendChild(s);
-      const l=document.createElement("link");l.rel="stylesheet";l.href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";document.head.appendChild(l);
-    }else initMap();
+      await new Promise(resolve=>{
+        const s=document.createElement("script");s.src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";s.onload=resolve;document.head.appendChild(s);
+        const l=document.createElement("link");l.rel="stylesheet";l.href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";document.head.appendChild(l);
+      });
+    }
+    await fetchRoute();
   };
 
-  const initMap=()=>{
+  const fetchRoute=async()=>{
+    if(!loc||!selRoute||!mapRef.current)return;
+    setLoadingRoute(true);
+    try{
+      // Reverse geocode start position
+      const geocodeRes=await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${loc.lat}&lon=${loc.lng}&format=json`);
+      const geocodeData=await geocodeRes.json();
+      const addr=geocodeData.display_name?.split(",").slice(0,2).join(",")||"Din position";
+      setStartAddr(addr);
+
+      // Generate waypoints around a loop based on km
+      const deg=(selRoute.km/4)/111;
+      const waypoints=[
+        [loc.lat,loc.lng],
+        [loc.lat+deg,loc.lng+deg*0.5],
+        [loc.lat+deg*0.5,loc.lng+deg],
+        [loc.lat-deg*0.3,loc.lng+deg*0.8],
+        [loc.lat,loc.lng]
+      ];
+
+      // Fetch real road route from OSRM
+      const coords=waypoints.map(([lat,lng])=>`${lng},${lat}`).join(";");
+      const osrmRes=await fetch(`https://router.project-osrm.org/route/v1/walking/${coords}?overview=full&geometries=geojson&steps=true`);
+      const osrmData=await osrmRes.json();
+
+      if(osrmData.routes&&osrmData.routes[0]){
+        const route=osrmData.routes[0];
+        const distKm=(route.distance/1000).toFixed(1);
+        const timeMin=Math.round(route.duration/60);
+        setRouteInfo({distKm,timeMin,steps:route.legs[0]?.steps?.slice(0,6)||[]});
+        initMap(route.geometry.coordinates);
+      }else{
+        initMapFallback();
+      }
+    }catch(e){
+      initMapFallback();
+    }
+    setLoadingRoute(false);
+  };
+
+  const initMap=(routeCoords)=>{
     if(!mapRef.current||!loc)return;
     if(mapInst.current){mapInst.current.remove();mapInst.current=null;}
     const L=window.L;
     const map=L.map(mapRef.current).setView([loc.lat,loc.lng],14);
     mapInst.current=map;
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"© OpenStreetMap"}).addTo(map);
-    const userIcon=L.divIcon({html:'<div style="width:16px;height:16px;background:#1A6B4A;border-radius:50%;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3)"></div>',iconSize:[16,16],iconAnchor:[8,8]});
-    L.marker([loc.lat,loc.lng],{icon:userIcon}).addTo(map).bindPopup("📍 Du är här").openPopup();
-    if(selRoute){
-      const r=(selRoute.km/(2*Math.PI))/111;
-      const pts=[];
-      for(let i=0;i<=360;i+=20){const a=(i*Math.PI)/180;pts.push([loc.lat+r*Math.cos(a),loc.lng+r*Math.sin(a)/Math.cos(loc.lat*Math.PI/180)]);}
-      L.polyline(pts,{color:"#1A6B4A",weight:4,opacity:0.8,dashArray:"10,5"}).addTo(map);
-      [[0,"1"],[6,"2"],[12,"3"]].forEach(([idx,n])=>{if(pts[idx])L.marker(pts[idx],{icon:L.divIcon({html:`<div style="width:24px;height:24px;background:#1A6B4A;border-radius:50%;border:2px solid white;display:flex;align-items:center;justify-content:center;color:white;font-size:10px;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,0.3)">${n}</div>`,iconSize:[24,24],iconAnchor:[12,12]})}).addTo(map);});
+
+    // Draw real route
+    if(routeCoords){
+      const latlngs=routeCoords.map(([lng,lat])=>[lat,lng]);
+      L.polyline(latlngs,{color:"#1A6B4A",weight:5,opacity:0.9}).addTo(map);
+      map.fitBounds(L.polyline(latlngs).getBounds(),{padding:[20,20]});
     }
+
+    // Start/end marker
+    const startIcon=L.divIcon({html:`<div style="width:32px;height:32px;background:#1A6B4A;border-radius:50%;border:3px solid white;display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 3px 8px rgba(0,0,0,0.3)">🏁</div>`,iconSize:[32,32],iconAnchor:[16,16]});
+    L.marker([loc.lat,loc.lng],{icon:startIcon}).addTo(map).bindPopup(`<b>Start & Mål</b><br/>${startAddr||"Din position"}`).openPopup();
+
+    // Waypoint markers
+    if(routeCoords&&routeCoords.length>0){
+      const quarter=Math.floor(routeCoords.length/4);
+      const half=Math.floor(routeCoords.length/2);
+      const three=Math.floor(routeCoords.length*3/4);
+      [[quarter,"1"],[half,"2"],[three,"3"]].forEach(([idx,n])=>{
+        if(routeCoords[idx]){
+          const[lng,lat]=routeCoords[idx];
+          L.marker([lat,lng],{icon:L.divIcon({html:`<div style="width:24px;height:24px;background:#2E9E6E;border-radius:50%;border:2px solid white;display:flex;align-items:center;justify-content:center;color:white;font-size:10px;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,0.3)">${n}</div>`,iconSize:[24,24],iconAnchor:[12,12]})}).addTo(map);
+        }
+      });
+    }
+  };
+
+  const initMapFallback=()=>{
+    if(!mapRef.current||!loc)return;
+    if(mapInst.current){mapInst.current.remove();mapInst.current=null;}
+    const L=window.L;
+    const map=L.map(mapRef.current).setView([loc.lat,loc.lng],14);
+    mapInst.current=map;
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"© OpenStreetMap"}).addTo(map);
+    const r=(selRoute.km/(2*Math.PI))/111;
+    const pts=[];
+    for(let i=0;i<=360;i+=15){const a=(i*Math.PI)/180;pts.push([loc.lat+r*Math.cos(a),loc.lng+r*Math.sin(a)/Math.cos(loc.lat*Math.PI/180)]);}
+    L.polyline(pts,{color:"#1A6B4A",weight:4,opacity:0.8,dashArray:"8,4"}).addTo(map);
+    const icon=L.divIcon({html:`<div style="width:32px;height:32px;background:#1A6B4A;border-radius:50%;border:3px solid white;display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 3px 8px rgba(0,0,0,0.3)">🏁</div>`,iconSize:[32,32],iconAnchor:[16,16]});
+    L.marker([loc.lat,loc.lng],{icon}).addTo(map).bindPopup("Start & Mål").openPopup();
   };
 
   const muscles=Object.keys(WORKOUTS);
@@ -1004,22 +1080,39 @@ function CoachScreen({onBack}){
                 <div style={{...SC.card,overflow:"hidden"}}>
                   <div style={{padding:"14px 16px",borderBottom:"1px solid #F0EDE8"}}>
                     <div style={{fontWeight:700,fontSize:15}}>{selRoute.emoji} {selRoute.namn} – {selRoute.km} km</div>
-                    <div style={{fontSize:12,color:"#888",marginTop:2}}>Ungefärlig runda från din position · {selRoute.tid}</div>
+                    {startAddr&&<div style={{fontSize:12,color:"#1A6B4A",fontWeight:500,marginTop:3}}>📍 {startAddr}</div>}
+                    {routeInfo&&<div style={{fontSize:12,color:"#888",marginTop:2}}>🛣️ {routeInfo.distKm} km faktisk rutt · ⏱️ ca {routeInfo.timeMin} min</div>}
+                    {!routeInfo&&<div style={{fontSize:12,color:"#888",marginTop:2}}>Beräknar rutt längs riktiga gator...</div>}
                   </div>
-                  <div ref={mapRef} style={{height:300,width:"100%",background:"#E8F5EE"}}/>
+                  {loadingRoute&&<div style={{height:300,background:"#E8F5EE",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12}}><div style={{fontSize:32}}>🗺️</div><div style={{fontSize:14,fontWeight:600,color:"#1A6B4A"}}>Beräknar rutt...</div><div style={{fontSize:12,color:"#888"}}>Hämtar riktiga gator</div></div>}
+                  <div ref={mapRef} style={{height:300,width:"100%",background:"#E8F5EE",display:loadingRoute?"none":"block"}}/>
+                  {routeInfo&&routeInfo.steps&&routeInfo.steps.length>0&&(
+                    <div style={{padding:"12px 16px",borderTop:"1px solid #F0EDE8"}}>
+                      <div style={{fontSize:12,fontWeight:600,color:"#888",marginBottom:8,textTransform:"uppercase",letterSpacing:0.5}}>Vägbeskrivning</div>
+                      {routeInfo.steps.map((step,i)=>(
+                        <div key={i} style={{display:"flex",gap:8,padding:"6px 0",borderBottom:"1px solid #F5F3EE",alignItems:"flex-start"}}>
+                          <div style={{width:20,height:20,background:"#E8F5EE",borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:"#1A6B4A",flexShrink:0,marginTop:1}}>{i+1}</div>
+                          <div>
+                            <div style={{fontSize:13,color:"#333"}}>{step.maneuver?.instruction||step.name||"Fortsätt"}</div>
+                            {step.distance>0&&<div style={{fontSize:11,color:"#888",marginTop:1}}>{step.distance<1000?`${Math.round(step.distance)} m`:`${(step.distance/1000).toFixed(1)} km`}</div>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <div style={{padding:"12px 16px",background:"#F5F3EE"}}>
                     <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
-                      {[["🟢","Start/Mål","Din position"],["1️⃣","Waypoint 1","¼ av rundan"],["2️⃣","Waypoint 2","Halvvägs"],["3️⃣","Waypoint 3","¾ av rundan"]].map(([ic,lb,desc])=>(
-                        <div key={lb} style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:14}}>{ic}</span><div><div style={{fontSize:11,fontWeight:600,color:"#333"}}>{lb}</div><div style={{fontSize:10,color:"#888"}}>{desc}</div></div></div>
+                      {[["🏁","Start & Mål",startAddr||"Din position"],["1️⃣","Checkpoint 1","¼ av rundan"],["2️⃣","Checkpoint 2","Halvvägs"],["3️⃣","Checkpoint 3","¾ av rundan"]].map(([ic,lb,desc])=>(
+                        <div key={lb} style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:14}}>{ic}</span><div><div style={{fontSize:11,fontWeight:600,color:"#333"}}>{lb}</div><div style={{fontSize:10,color:"#888",maxWidth:100,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{desc}</div></div></div>
                       ))}
                     </div>
                   </div>
                 </div>
                 <div style={{...SC.card,padding:16,background:"linear-gradient(135deg,#E8F5EE,#F0FAF5)"}}>
                   <div style={{fontSize:13,fontWeight:600,color:"#1A6B4A",marginBottom:8}}>💡 Tips för din {selRoute.namn.toLowerCase()}</div>
-                  {selRoute.km<=3&&<div style={{fontSize:13,color:"#555",lineHeight:1.8}}>• Ta det lugnt och njut av omgivningen{"\n"}• Bra för återhämtning och mental hälsa{"\n"}• Perfekt att göra med en vän</div>}
-                  {selRoute.km>3&&selRoute.km<=7&&<div style={{fontSize:13,color:"#555",lineHeight:1.8}}>• Värm upp 5 min med promenad{"\n"}• Håll ett pratbart tempo{"\n"}• Drick vatten innan och efter</div>}
-                  {selRoute.km>7&&<div style={{fontSize:13,color:"#555",lineHeight:1.8}}>• Ta med vatten{"\n"}• Ät kolhydrater 2h innan{"\n"}• Sänk tempot om det känns tungt{"\n"}• Sträck ut ordentligt efteråt</div>}
+                  {selRoute.km<=3&&<div style={{fontSize:13,color:"#555",lineHeight:1.8}}><div>• Ta det lugnt och njut av omgivningen</div><div>• Bra för återhämtning och mental hälsa</div><div>• Perfekt att göra med en vän</div></div>}
+                  {selRoute.km>3&&selRoute.km<=7&&<div style={{fontSize:13,color:"#555",lineHeight:1.8}}><div>• Värm upp 5 min med promenad</div><div>• Håll ett pratbart tempo</div><div>• Drick vatten innan och efter</div></div>}
+                  {selRoute.km>7&&<div style={{fontSize:13,color:"#555",lineHeight:1.8}}><div>• Ta med vatten</div><div>• Ät kolhydrater 2h innan</div><div>• Sänk tempot om det känns tungt</div><div>• Sträck ut ordentligt efteråt</div></div>}
                 </div>
               </>
             )}
@@ -1078,4 +1171,3 @@ function ExCard({exercise,index,color,SC}){
     </div>
   );
 }
-
