@@ -1079,5 +1079,3 @@ function ExCard({exercise,index,color,SC}){
   );
 }
 
-
-Done! 1079 lines
