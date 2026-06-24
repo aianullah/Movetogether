@@ -713,12 +713,29 @@ export default function App() {
                 </div>
                 <div style={{...S.card,padding:18}}>
                   <label style={S.lbl}>Mina vänner ({friends.length})</label>
-                  {friends.length===0?<div style={{textAlign:"center",padding:24,color:"#888"}}><div style={{fontSize:40,marginBottom:8}}>👥</div><div style={{fontSize:13}}>Inga vänner än – sök efter folk ovan!</div></div>:(
+                  {friends.length===0?(
+                    <div style={{textAlign:"center",padding:24,color:"#888"}}><div style={{fontSize:40,marginBottom:8}}>👥</div><div style={{fontSize:13}}>Inga vänner än – sök efter folk ovan!</div></div>
+                  ):(
                     friends.map(f=>(
-                      <div key={f.id} onClick={()=>{setViewProf(f);setPrevScreen("profile");go("viewprofile");}} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:"1px solid #F5F3EE",cursor:"pointer"}}>
-                        <Av p={f} size={44}/>
-                        <div style={{flex:1}}><div style={{fontSize:14,fontWeight:600}}>{f.namn}</div><div style={{fontSize:12,color:"#888"}}>📍 {f.stad} · {f.hedersemblem||"🌱"}</div></div>
-                        <span style={{fontSize:18,color:"#AAA"}}>›</span>
+                      <div key={f.id} style={{borderBottom:"1px solid #F5F3EE",paddingBottom:12,marginBottom:12}}>
+                        <div onClick={()=>{setViewProf(f);setPrevScreen("profile");go("viewprofile");}} style={{display:"flex",alignItems:"center",gap:12,cursor:"pointer",marginBottom:8}}>
+                          <Av p={f} size={48}/>
+                          <div style={{flex:1}}>
+                            <div style={{fontSize:15,fontWeight:700,color:"#1A1A1A"}}>{f.namn}</div>
+                            <div style={{fontSize:12,color:"#888",marginTop:2}}>📍 {f.stad}</div>
+                            <div style={{fontSize:11,color:"#1A6B4A",fontWeight:500,marginTop:2}}>{f.hedersemblem||"🌱 Ny medlem"}</div>
+                          </div>
+                          <span style={{fontSize:18,color:"#CCC"}}>›</span>
+                        </div>
+                        <div style={{display:"flex",gap:8"}}>
+                          <button onClick={()=>{setViewProf(f);setPrevScreen("profile");go("viewprofile");}} style={{flex:1,background:"#F5F3EE",border:"none",borderRadius:10,padding:"8px",fontSize:12,fontWeight:600,color:"#555",cursor:"pointer"}}>👤 Profil</button>
+                          {acts.filter(a=>!expired(a.datum,a.tid)).length>0&&(
+                            <select onChange={e=>{if(e.target.value)inviteFriend(f.id,e.target.value);e.target.value="";}} style={{flex:2,background:"#1A6B4A",border:"none",borderRadius:10,padding:"8px",fontSize:12,fontWeight:600,color:"white",cursor:"pointer"}}>
+                              <option value="">📩 Bjud in till aktivitet...</option>
+                              {acts.filter(a=>!expired(a.datum,a.tid)).map(a=><option key={a.id} value={a.id}>{emoji(a.typ)} {a.titel} – {a.datum}</option>)}
+                            </select>
+                          )}
+                        </div>
                       </div>
                     ))
                   )}
@@ -741,20 +758,36 @@ export default function App() {
                     <div style={{marginTop:10,fontSize:12,opacity:0.7}}>📍 {stats.cities} städer · {getBadge(myParts.length)}</div>
                   </div>
                 )}
-                {myHistory.length===0?<div style={{textAlign:"center",padding:48,color:"#888"}}><div style={{fontSize:56,marginBottom:12}}>📊</div><div style={{fontWeight:600,marginBottom:8}}>Ingen historik än!</div><div style={{fontSize:13}}>Gå med i aktiviteter – de visas här när de avslutats</div></div>:(
-                  myHistory.map(act=>(
-                    <div key={act.id} style={{...S.card,padding:0,overflow:"hidden"}}>
-                      <div style={{background:color(act.typ),padding:"12px 16px",display:"flex",alignItems:"center",gap:12}}>
-                        <span style={{fontSize:28}}>{emoji(act.typ)}</span>
-                        <div style={{flex:1}}><div style={{color:"white",fontWeight:700,fontSize:14}}>{act.titel}</div><div style={{color:"rgba(255,255,255,0.8)",fontSize:12,marginTop:2}}>📍 {act.plats||act.stad}</div></div>
-                        <div style={{background:"rgba(255,255,255,0.2)",borderRadius:10,padding:"4px 10px",color:"white",fontSize:12,fontWeight:600}}>✓ Avklarad</div>
+                {myHistory.length===0?(
+                  <div style={{textAlign:"center",padding:48,color:"#888"}}><div style={{fontSize:56,marginBottom:12}}>📊</div><div style={{fontWeight:600,marginBottom:8}}>Ingen historik än!</div><div style={{fontSize:13}}>Gå med i aktiviteter – de visas här när de avslutats</div></div>
+                ):(
+                  <>
+                    <div style={{fontSize:13,color:"#888",fontWeight:500}}>Alla {myHistory.length} genomförda aktiviteter</div>
+                    {myHistory.sort((a,b)=>new Date(b.datum)-new Date(a.datum)).map((act,i)=>(
+                      <div key={act.id||i} style={{...S.card,padding:0,overflow:"hidden"}}>
+                        <div style={{background:color(act.typ),padding:"14px 16px",display:"flex",alignItems:"center",gap:12}}>
+                          <div style={{width:44,height:44,background:"rgba(255,255,255,0.2)",borderRadius:12,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,flexShrink:0}}>{emoji(act.typ)}</div>
+                          <div style={{flex:1}}>
+                            <div style={{color:"white",fontWeight:700,fontSize:14,lineHeight:1.2}}>{act.titel}</div>
+                            <div style={{color:"rgba(255,255,255,0.8)",fontSize:12,marginTop:3}}>📍 {act.plats||act.stad||"Okänd plats"}</div>
+                          </div>
+                          <div style={{textAlign:"right"}}>
+                            <div style={{background:"rgba(255,255,255,0.25)",borderRadius:10,padding:"4px 10px",color:"white",fontSize:11,fontWeight:600}}>✓ Klar</div>
+                          </div>
+                        </div>
+                        <div style={{padding:"10px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",background:"white"}}>
+                          <div>
+                            <div style={{fontSize:13,color:"#555",fontWeight:500}}>{act.typ}</div>
+                            <div style={{fontSize:12,color:"#888",marginTop:1}}>📅 {act.datum}{act.tid?` · ${act.tid}`:""}</div>
+                          </div>
+                          <div style={{textAlign:"right"}}>
+                            <div style={{fontSize:13,color:"#1A6B4A",fontWeight:700}}>+1 aktivitet 🔥</div>
+                            <div style={{fontSize:11,color:"#888",marginTop:1}}>#{myHistory.length-i} av {myHistory.length}</div>
+                          </div>
+                        </div>
                       </div>
-                      <div style={{padding:"10px 16px",display:"flex",justifyContent:"space-between"}}>
-                        <div style={{fontSize:13,color:"#888"}}>📅 {act.datum} · {act.tid}</div>
-                        <div style={{fontSize:13,color:"#1A6B4A",fontWeight:600}}>+1 🔥</div>
-                      </div>
-                    </div>
-                  ))
+                    ))}
+                  </>
                 )}
               </>}
 
@@ -891,71 +924,124 @@ function CoachScreen({onBack}){
   const fetchRoute=async()=>{
     if(!loc||!selRoute||!mapRef.current)return;
     setLoadingRoute(true);
+    setRouteInfo(null);
     try{
-      // Reverse geocode start position
-      const geocodeRes=await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${loc.lat}&lon=${loc.lng}&format=json`);
-      const geocodeData=await geocodeRes.json();
-      const addr=geocodeData.display_name?.split(",").slice(0,2).join(",")||"Din position";
+      // 1. Reverse geocode to get street address
+      const geoRes=await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${loc.lat}&lon=${loc.lng}&format=json&accept-language=sv`);
+      const geoData=await geoRes.json();
+      const road=geoData.address?.road||geoData.address?.pedestrian||"";
+      const city=geoData.address?.city||geoData.address?.town||geoData.address?.village||"";
+      const addr=road?`${road}, ${city}`:geoData.display_name?.split(",").slice(0,2).join(",")||"Din position";
       setStartAddr(addr);
 
-      // Generate waypoints around a loop based on km
-      const deg=(selRoute.km/4)/111;
+      // 2. Generate smart loop waypoints based on km distance
+      // Spread waypoints in a loop shape around start
+      const d=(selRoute.km/4)/111.32; // degrees per km
+      const latCorr=Math.cos(loc.lat*Math.PI/180);
       const waypoints=[
-        [loc.lat,loc.lng],
-        [loc.lat+deg,loc.lng+deg*0.5],
-        [loc.lat+deg*0.5,loc.lng+deg],
-        [loc.lat-deg*0.3,loc.lng+deg*0.8],
-        [loc.lat,loc.lng]
+        {lat:loc.lat,lng:loc.lng},
+        {lat:loc.lat+d,lng:loc.lng+d*0.8/latCorr},
+        {lat:loc.lat+d*1.2,lng:loc.lng+d*0.1/latCorr},
+        {lat:loc.lat+d*0.5,lng:loc.lng-d*0.7/latCorr},
+        {lat:loc.lat,lng:loc.lng} // back to start
       ];
 
-      // Fetch real road route from OSRM
-      const coords=waypoints.map(([lat,lng])=>`${lng},${lat}`).join(";");
-      const osrmRes=await fetch(`https://router.project-osrm.org/route/v1/walking/${coords}?overview=full&geometries=geojson&steps=true`);
+      const coords=waypoints.map(w=>`${w.lng},${w.lat}`).join(";");
+      const osrmRes=await fetch(`https://router.project-osrm.org/route/v1/foot/${coords}?overview=full&geometries=geojson&steps=true&annotations=false`);
       const osrmData=await osrmRes.json();
 
-      if(osrmData.routes&&osrmData.routes[0]){
+      if(osrmData.code==="Ok"&&osrmData.routes&&osrmData.routes[0]){
         const route=osrmData.routes[0];
         const distKm=(route.distance/1000).toFixed(1);
         const timeMin=Math.round(route.duration/60);
-        setRouteInfo({distKm,timeMin,steps:route.legs[0]?.steps?.slice(0,6)||[]});
-        initMap(route.geometry.coordinates);
+
+        // Extract turn-by-turn from all legs
+        const allSteps=[];
+        route.legs.forEach(leg=>{
+          leg.steps.forEach(step=>{
+            if(step.maneuver.type==="arrive"&&allSteps.length>0)return;
+            const manType=step.maneuver.type;
+            const manMod=step.maneuver.modifier||"";
+            let icon="➡️";
+            if(manType==="turn"){
+              if(manMod.includes("left"))icon="↰";
+              else if(manMod.includes("right"))icon="↱";
+              else icon="↑";
+            } else if(manType==="depart")icon="🏁";
+            else if(manType==="arrive")icon="🏁";
+            else if(manType==="roundabout")icon="🔄";
+            else if(manType==="continue")icon="↑";
+            
+            const streetName=step.name||step.ref||"";
+            let instruction="";
+            if(manType==="depart")instruction=`Starta på ${streetName||"gatan"}`;
+            else if(manType==="arrive")instruction=`Ankomst – tillbaka vid start! 🎉`;
+            else if(manType==="turn"){
+              const dir=manMod.includes("left")?"vänster":manMod.includes("right")?"höger":"rakt fram";
+              instruction=`Sväng ${dir}${streetName?` på ${streetName}`:""}`;
+            } else if(manType==="continue")instruction=`Fortsätt${streetName?` på ${streetName}`:""}`;
+            else if(manType==="roundabout")instruction=`Ta rondellen${streetName?` mot ${streetName}`:""}`;
+            else instruction=streetName||"Fortsätt";
+
+            if(step.distance>5||manType==="depart"||manType==="arrive"){
+              allSteps.push({
+                icon,instruction,
+                dist:step.distance<1000?`${Math.round(step.distance)} m`:`${(step.distance/1000).toFixed(1)} km`,
+                distNum:step.distance
+              });
+            }
+          });
+        });
+
+        setRouteInfo({distKm,timeMin,steps:allSteps,geometry:route.geometry.coordinates});
+        initMap(route.geometry.coordinates,allSteps);
       }else{
         initMapFallback();
       }
     }catch(e){
+      console.error(e);
       initMapFallback();
     }
     setLoadingRoute(false);
   };
 
-  const initMap=(routeCoords)=>{
+  const initMap=(routeCoords,steps)=>{
     if(!mapRef.current||!loc)return;
     if(mapInst.current){mapInst.current.remove();mapInst.current=null;}
     const L=window.L;
     const map=L.map(mapRef.current).setView([loc.lat,loc.lng],14);
     mapInst.current=map;
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"© OpenStreetMap"}).addTo(map);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"© OpenStreetMap contributors"}).addTo(map);
 
-    // Draw real route
-    if(routeCoords){
+    if(routeCoords&&routeCoords.length>0){
       const latlngs=routeCoords.map(([lng,lat])=>[lat,lng]);
-      L.polyline(latlngs,{color:"#1A6B4A",weight:5,opacity:0.9}).addTo(map);
-      map.fitBounds(L.polyline(latlngs).getBounds(),{padding:[20,20]});
+      // Shadow line for depth
+      L.polyline(latlngs,{color:"#0D3D2B",weight:8,opacity:0.3}).addTo(map);
+      // Main route line
+      L.polyline(latlngs,{color:"#1A6B4A",weight:5,opacity:1}).addTo(map);
+      map.fitBounds(L.polyline(latlngs).getBounds(),{padding:[30,30]});
     }
 
-    // Start/end marker
-    const startIcon=L.divIcon({html:`<div style="width:32px;height:32px;background:#1A6B4A;border-radius:50%;border:3px solid white;display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 3px 8px rgba(0,0,0,0.3)">🏁</div>`,iconSize:[32,32],iconAnchor:[16,16]});
-    L.marker([loc.lat,loc.lng],{icon:startIcon}).addTo(map).bindPopup(`<b>Start & Mål</b><br/>${startAddr||"Din position"}`).openPopup();
+    // Start/Finish marker
+    const startIcon=L.divIcon({
+      html:`<div style="background:#1A6B4A;color:white;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:16px;border:3px solid white;box-shadow:0 3px 10px rgba(0,0,0,0.4)">🏁</div>`,
+      iconSize:[36,36],iconAnchor:[18,18]
+    });
+    L.marker([loc.lat,loc.lng],{icon:startIcon}).addTo(map)
+      .bindPopup(`<b>Start & Mål</b><br/><small>${startAddr||"Din position"}</small>`).openPopup();
 
-    // Waypoint markers
-    if(routeCoords&&routeCoords.length>0){
-      const quarter=Math.floor(routeCoords.length/4);
-      const half=Math.floor(routeCoords.length/2);
-      const three=Math.floor(routeCoords.length*3/4);
-      [[quarter,"1"],[half,"2"],[three,"3"]].forEach(([idx,n])=>{
+    // Turn markers along route
+    if(routeCoords&&routeCoords.length>0&&steps&&steps.length>1){
+      const segLen=Math.floor(routeCoords.length/Math.min(steps.length,6));
+      steps.slice(1,-1).forEach((step,i)=>{
+        const idx=Math.min((i+1)*segLen,routeCoords.length-1);
         if(routeCoords[idx]){
           const[lng,lat]=routeCoords[idx];
-          L.marker([lat,lng],{icon:L.divIcon({html:`<div style="width:24px;height:24px;background:#2E9E6E;border-radius:50%;border:2px solid white;display:flex;align-items:center;justify-content:center;color:white;font-size:10px;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,0.3)">${n}</div>`,iconSize:[24,24],iconAnchor:[12,12]})}).addTo(map);
+          const turnIcon=L.divIcon({
+            html:`<div style="background:white;color:#1A6B4A;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:12px;border:2px solid #1A6B4A;box-shadow:0 2px 6px rgba(0,0,0,0.3)">${step.icon}</div>`,
+            iconSize:[24,24],iconAnchor:[12,12]
+          });
+          L.marker([lat,lng],{icon:turnIcon}).addTo(map).bindPopup(`<b>${step.icon} ${step.instruction}</b><br/><small>${step.dist}</small>`);
         }
       });
     }
@@ -1087,14 +1173,14 @@ function CoachScreen({onBack}){
                   {loadingRoute&&<div style={{height:300,background:"#E8F5EE",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12}}><div style={{fontSize:32}}>🗺️</div><div style={{fontSize:14,fontWeight:600,color:"#1A6B4A"}}>Beräknar rutt...</div><div style={{fontSize:12,color:"#888"}}>Hämtar riktiga gator</div></div>}
                   <div ref={mapRef} style={{height:300,width:"100%",background:"#E8F5EE",display:loadingRoute?"none":"block"}}/>
                   {routeInfo&&routeInfo.steps&&routeInfo.steps.length>0&&(
-                    <div style={{padding:"12px 16px",borderTop:"1px solid #F0EDE8"}}>
-                      <div style={{fontSize:12,fontWeight:600,color:"#888",marginBottom:8,textTransform:"uppercase",letterSpacing:0.5}}>Vägbeskrivning</div>
+                    <div style={{padding:"12px 16px",borderTop:"1px solid #F0EDE8",maxHeight:280,overflowY:"auto"}}>
+                      <div style={{fontSize:12,fontWeight:600,color:"#888",marginBottom:10,textTransform:"uppercase",letterSpacing:0.5}}>🗺️ Turn-by-turn vägbeskrivning</div>
                       {routeInfo.steps.map((step,i)=>(
-                        <div key={i} style={{display:"flex",gap:8,padding:"6px 0",borderBottom:"1px solid #F5F3EE",alignItems:"flex-start"}}>
-                          <div style={{width:20,height:20,background:"#E8F5EE",borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:"#1A6B4A",flexShrink:0,marginTop:1}}>{i+1}</div>
-                          <div>
-                            <div style={{fontSize:13,color:"#333"}}>{step.maneuver?.instruction||step.name||"Fortsätt"}</div>
-                            {step.distance>0&&<div style={{fontSize:11,color:"#888",marginTop:1}}>{step.distance<1000?`${Math.round(step.distance)} m`:`${(step.distance/1000).toFixed(1)} km`}</div>}
+                        <div key={i} style={{display:"flex",gap:10,padding:"8px 0",borderBottom:"1px solid #F5F3EE",alignItems:"center"}}>
+                          <div style={{width:32,height:32,background:i===0||i===routeInfo.steps.length-1?"#1A6B4A":"#E8F5EE",borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0}}>{step.icon}</div>
+                          <div style={{flex:1}}>
+                            <div style={{fontSize:13,fontWeight:500,color:"#1A1A1A"}}>{step.instruction}</div>
+                            <div style={{fontSize:11,color:"#888",marginTop:1}}>{step.dist}</div>
                           </div>
                         </div>
                       ))}
