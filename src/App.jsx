@@ -727,7 +727,7 @@ export default function App() {
                           </div>
                           <span style={{fontSize:18,color:"#CCC"}}>›</span>
                         </div>
-                        <div style={{display:"flex",gap:8"}}>
+                        <div style={{display:"flex",gap:8}}>
                           <button onClick={()=>{setViewProf(f);setPrevScreen("profile");go("viewprofile");}} style={{flex:1,background:"#F5F3EE",border:"none",borderRadius:10,padding:"8px",fontSize:12,fontWeight:600,color:"#555",cursor:"pointer"}}>👤 Profil</button>
                           {acts.filter(a=>!expired(a.datum,a.tid)).length>0&&(
                             <select onChange={e=>{if(e.target.value)inviteFriend(f.id,e.target.value);e.target.value="";}} style={{flex:2,background:"#1A6B4A",border:"none",borderRadius:10,padding:"8px",fontSize:12,fontWeight:600,color:"white",cursor:"pointer"}}>
